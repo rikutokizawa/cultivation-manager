@@ -66,3 +66,32 @@
 - frontend build は成功
 - backend import は成功
 - seed 再投入により新しいダミーセンサ種別が入る状態に更新
+
+## 2026-04-08
+
+### 実施内容
+
+- `.env.example` を追加
+- sensor source / camera source の切替機構を追加
+- `collect_sensor_data.py`, `capture_images.py`, `run_runtime.py` を追加
+- `POST /upload-image` と `GET /dashboard/summary` を追加
+- runtime プログラムの README と docs を追加
+
+### 実行確認
+
+- `.venv/bin/python -c 'from backend.app.main import app; print(app.title)'`
+- `.venv/bin/python -m backend.scripts.collect_sensor_data --source dummy`
+- `.venv/bin/python -m backend.scripts.capture_images --source dummy`
+- `.venv/bin/python -m backend.scripts.run_runtime --cycles 2`
+- `GET /dashboard/summary`
+- `POST /upload-image`
+
+### 確認結果メモ
+
+- app import は成功
+- upload-image route と dashboard-summary route の import は成功
+- one-shot の sensor collect で 4 件保存できた
+- one-shot の image capture で 2 件保存できた
+- runtime ランナーで sensor / image の両方を定期実行できた
+- `dashboard/summary` は件数と source 種別を返した
+- `upload-image` は multipart 画像登録で `image_records` に保存できた

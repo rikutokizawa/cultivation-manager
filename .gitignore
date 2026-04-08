@@ -13,6 +13,9 @@ storage/*.db
 storage/*.sqlite3
 storage/images/*
 storage/exports/*
+storage/incoming/*
+storage/runtime/*
 !storage/images/.gitkeep
 !storage/exports/.gitkeep
-
+!storage/incoming/.gitkeep
+!storage/runtime/.gitkeep
