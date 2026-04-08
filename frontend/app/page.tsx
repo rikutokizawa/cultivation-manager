@@ -2,16 +2,16 @@ import Link from "next/link";
 
 import { LatestImages } from "@/components/latest-images";
 import { SectionCard } from "@/components/section-card";
+import { SensorLineChart } from "@/components/sensor-line-chart";
 import { StatusCard } from "@/components/status-card";
-import { TemperatureChart } from "@/components/temperature-chart";
-import { getHealth, getLatestStatus, getTemperatureSeries } from "@/lib/api";
+import { getLatestStatus, getSensorSeries } from "@/lib/api";
 
-function formatTemperature(value: number | undefined, unit: string | undefined) {
+function formatMetric(value: number | undefined, unit: string | undefined, digits = 1) {
   if (value === undefined || !unit) {
     return "--";
   }
 
-  return `${value.toFixed(1)} ${unit}`;
+  return `${value.toFixed(digits)} ${unit}`;
 }
 
 function formatDateTime(value: string | undefined) {
@@ -28,62 +28,140 @@ function formatDateTime(value: string | undefined) {
 }
 
 export default async function DashboardPage() {
-  const [health, latestStatus, temperatureRecords] = await Promise.all([
-    getHealth(),
+  const [
+    latestStatus,
+    temperatureRecords,
+    humidityRecords,
+    co2Records,
+    tankLevelRecords,
+  ] = await Promise.all([
     getLatestStatus(),
-    getTemperatureSeries(),
+    getSensorSeries("temperature"),
+    getSensorSeries("humidity"),
+    getSensorSeries("co2"),
+    getSensorSeries("tank_level"),
   ]);
 
-  const latestTemperature = latestStatus.latest_temperature;
+  const heroMetrics = [
+    {
+      label: "温度",
+      value: formatMetric(latestStatus.latest_temperature?.value, latestStatus.latest_temperature?.unit),
+      meta: `更新 ${formatDateTime(latestStatus.latest_temperature?.timestamp)}`,
+      accent: "green" as const,
+    },
+    {
+      label: "湿度",
+      value: formatMetric(latestStatus.latest_humidity?.value, latestStatus.latest_humidity?.unit),
+      meta: `更新 ${formatDateTime(latestStatus.latest_humidity?.timestamp)}`,
+      accent: "blue" as const,
+    },
+    {
+      label: "CO2濃度",
+      value: formatMetric(latestStatus.latest_co2?.value, latestStatus.latest_co2?.unit, 0),
+      meta: `更新 ${formatDateTime(latestStatus.latest_co2?.timestamp)}`,
+      accent: "amber" as const,
+    },
+    {
+      label: "タンク水位",
+      value: formatMetric(latestStatus.latest_tank_level?.value, latestStatus.latest_tank_level?.unit, 0),
+      meta: `${latestStatus.latest_tank_level?.location ?? "nutrient-tank-a"}`,
+      accent: "slate" as const,
+    },
+    {
+      label: "接続状況",
+      value: latestStatus.connection_status.overall_status.toUpperCase(),
+      meta: `確認 ${formatDateTime(latestStatus.connection_status.checked_at)}`,
+      accent: "green" as const,
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      <section className="grid gap-4 lg:grid-cols-3">
-        <StatusCard
-          label="現在温度"
-          value={formatTemperature(latestTemperature?.value, latestTemperature?.unit)}
-          meta={`更新 ${formatDateTime(latestTemperature?.timestamp)} / ${latestTemperature?.location ?? "--"}`}
-          accent="green"
-        />
-        <StatusCard
-          label="画像更新"
-          value={`${latestStatus.latest_images.length} cameras`}
-          meta={
-            latestStatus.latest_images[0]
-              ? `最新 ${formatDateTime(latestStatus.latest_images[0].timestamp)}`
-              : "画像データなし"
-          }
-          accent="amber"
-        />
-        <StatusCard
-          label="システム状態"
-          value={health.status.toUpperCase()}
-          meta={`API: ${health.app_name}`}
-          accent="slate"
-        />
+    <div className="space-y-8">
+      <section className="dashboard-first-view grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="panel hero-grid flex h-full min-h-[26rem] flex-col rounded-[30px] p-5 shadow-soft sm:p-6">
+          <div className="mb-5 flex items-end justify-between gap-4 border-b border-ink/10 pb-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-leaf/80">
+                Live Overview
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold">トップ画面で主要監視項目を一覧表示</h2>
+            </div>
+            <a
+              href="#timeseries"
+              className="rounded-full border border-ink/10 bg-white/80 px-4 py-2 text-sm font-medium text-ink/75 transition hover:bg-white"
+            >
+              詳細へ
+            </a>
+          </div>
+          <div className="grid flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {heroMetrics.map((metric) => (
+              <StatusCard
+                key={metric.label}
+                label={metric.label}
+                value={metric.value}
+                meta={metric.meta}
+                accent={metric.accent}
+                compact
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="panel flex h-full min-h-[26rem] flex-col rounded-[30px] p-5 shadow-soft sm:p-6">
+          <div className="mb-5 border-b border-ink/10 pb-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-leaf/80">
+              Camera Feed
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold">栽培画像 2 枚</h2>
+            <p className="mt-2 text-sm leading-6 text-ink/65">
+              1 画面目では最新画像を常時表示し、詳細時系列は下へスクロールして確認します。
+            </p>
+          </div>
+          <div className="flex-1">
+            <LatestImages images={latestStatus.latest_images} compact />
+          </div>
+        </div>
       </section>
 
-      <SectionCard
-        eyebrow="Time Series"
-        title="温度の時系列グラフ"
-        description="直近のダミーデータを読み込み、研究室での閲覧を想定したベース画面を先に固めています。"
-      >
-        <TemperatureChart records={temperatureRecords} />
-      </SectionCard>
+      <section id="timeseries" className="grid gap-6 xl:grid-cols-2">
+        <SectionCard
+          eyebrow="Time Series"
+          title="温度の時系列"
+          description="栽培室の温度変動を追跡します。"
+        >
+          <SensorLineChart records={temperatureRecords} unit="C" color="#38795b" />
+        </SectionCard>
 
-      <SectionCard
-        eyebrow="Latest Cameras"
-        title="最新画像"
-        description="いまは SVG のダミー画像を表示しています。後で USB カメラ保存処理に差し替えます。"
-      >
-        <LatestImages images={latestStatus.latest_images} />
-      </SectionCard>
+        <SectionCard
+          eyebrow="Time Series"
+          title="湿度の時系列"
+          description="湿度制御の安定性を確認します。"
+        >
+          <SensorLineChart records={humidityRecords} unit="%" color="#2563eb" />
+        </SectionCard>
+
+        <SectionCard
+          eyebrow="Time Series"
+          title="CO2濃度の時系列"
+          description="将来の実機 CO2 センサ統合を見据えた表示枠です。"
+        >
+          <SensorLineChart records={co2Records} unit="ppm" color="#c67f2a" />
+        </SectionCard>
+
+        <SectionCard
+          eyebrow="Time Series"
+          title="タンク水位の時系列"
+          description="養液タンクの残量推移を監視します。"
+        >
+          <SensorLineChart records={tankLevelRecords} unit="%" color="#334155" />
+        </SectionCard>
+      </section>
 
       <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <SectionCard
           eyebrow="Flow"
-          title="次の作業"
-          description="v0.1 では dashboard, manual input, export を最小導線でつなぎます。"
+          title="運用導線"
+          description="監視トップの下から、そのまま入力と出力に移れます。"
         >
           <div className="grid gap-3 sm:grid-cols-2">
             <Link
@@ -121,11 +199,10 @@ export default async function DashboardPage() {
           <ul className="space-y-3 text-sm leading-6 text-ink/70">
             <li>保存先と URL は `.env` / `.env.local` に切り出し。</li>
             <li>センサ取得ロジックは backend の services / scripts に寄せる。</li>
-            <li>frontend は backend API を直接参照し、認証追加に備えて責務を分離。</li>
+            <li>トップ画面は主要監視項目を 1 画面に集約し、詳細はスクロール下へ分離。</li>
           </ul>
         </SectionCard>
       </section>
     </div>
   );
 }
-

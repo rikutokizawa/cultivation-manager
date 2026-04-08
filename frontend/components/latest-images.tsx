@@ -2,6 +2,7 @@ import type { ImageRecord } from "@/types/api";
 
 type LatestImagesProps = {
   images: ImageRecord[];
+  compact?: boolean;
 };
 
 function formatTimestamp(timestamp: string) {
@@ -13,9 +14,9 @@ function formatTimestamp(timestamp: string) {
   }).format(new Date(timestamp));
 }
 
-export function LatestImages({ images }: LatestImagesProps) {
+export function LatestImages({ images, compact = false }: LatestImagesProps) {
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className={`grid gap-4 ${compact ? "grid-cols-1" : "lg:grid-cols-2"}`}>
       {images.map((image) => (
         <article
           key={image.id}
@@ -25,7 +26,7 @@ export function LatestImages({ images }: LatestImagesProps) {
           <img
             src={image.public_url}
             alt={`${image.camera_id} at ${image.location}`}
-            className="h-56 w-full object-cover"
+            className={`${compact ? "h-44" : "h-56"} w-full object-cover`}
           />
           <div className="space-y-2 px-4 py-4">
             <div className="flex items-center justify-between gap-3">
@@ -42,4 +43,3 @@ export function LatestImages({ images }: LatestImagesProps) {
     </div>
   );
 }
-

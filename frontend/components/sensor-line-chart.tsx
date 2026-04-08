@@ -12,8 +12,10 @@ import {
 
 import type { SensorRecord } from "@/types/api";
 
-type TemperatureChartProps = {
+type SensorLineChartProps = {
   records: SensorRecord[];
+  unit: string;
+  color: string;
 };
 
 function formatLabel(timestamp: string) {
@@ -21,7 +23,11 @@ function formatLabel(timestamp: string) {
   return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:00`;
 }
 
-export function TemperatureChart({ records }: TemperatureChartProps) {
+export function SensorLineChart({
+  records,
+  unit,
+  color,
+}: SensorLineChartProps) {
   const chartData = [...records]
     .reverse()
     .map((record) => ({
@@ -30,7 +36,7 @@ export function TemperatureChart({ records }: TemperatureChartProps) {
     }));
 
   return (
-    <div className="h-[320px] w-full">
+    <div className="h-[280px] w-full">
       <ResponsiveContainer>
         <LineChart data={chartData} margin={{ left: 4, right: 18, top: 18, bottom: 4 }}>
           <CartesianGrid stroke="rgba(19, 38, 29, 0.08)" strokeDasharray="4 4" />
@@ -46,7 +52,7 @@ export function TemperatureChart({ records }: TemperatureChartProps) {
             tickLine={false}
             axisLine={false}
             domain={["dataMin - 1", "dataMax + 1"]}
-            unit="C"
+            unit={unit}
           />
           <Tooltip
             contentStyle={{
@@ -58,14 +64,13 @@ export function TemperatureChart({ records }: TemperatureChartProps) {
           <Line
             type="monotone"
             dataKey="value"
-            stroke="#38795b"
+            stroke={color}
             strokeWidth={3}
             dot={false}
-            activeDot={{ r: 5, fill: "#204f3a" }}
+            activeDot={{ r: 5, fill: color }}
           />
         </LineChart>
       </ResponsiveContainer>
     </div>
   );
 }
-

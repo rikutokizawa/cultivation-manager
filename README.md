@@ -13,14 +13,15 @@
 ## Backend 起動
 
 ```bash
+mise trust
 uv venv
 source .venv/bin/activate
-uv pip install -r backend/requirements.txt
+uv pip install --python .venv/bin/python -r backend/requirements.txt
 python -m backend.scripts.seed_dummy_data --reset
-uv run uvicorn backend.app.main:app --reload
+.venv/bin/python -m uvicorn backend.app.main:app --reload
 ```
 
-`mise` を使っていてこのディレクトリが未 trust の場合は、最初に一度 `mise trust` を実行してください。
+`uv pip install -r ...` だけだと別の仮想環境へ入ることがあるため、このリポジトリでは `--python .venv/bin/python` を付けてインストール先を固定します。
 
 ## Frontend 起動
 
@@ -31,6 +32,19 @@ cd frontend
 ```
 
 `.env.local` を使う場合は、`frontend/.env.local.example` を元に `NEXT_PUBLIC_BACKEND_BASE_URL` を設定してください。
+
+`3000` 番ポートが使用中で起動できない場合:
+
+```bash
+lsof -nP -iTCP:3000 -sTCP:LISTEN
+kill <PID>
+```
+
+または別ポートで起動します。
+
+```bash
+/Users/kizawarikuto/.local/share/mise/installs/pnpm/10.22.0/pnpm dev -- --port 3001
+```
 
 ## 確認先
 

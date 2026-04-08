@@ -52,6 +52,30 @@ def seed_dummy_data(db: Session, reset: bool = False) -> None:
                 note="Simulated baseline humidity",
             )
         )
+        sensor_records.append(
+            SensorRecord(
+                timestamp=timestamp,
+                sensor_type="co2",
+                sensor_id="co2-sim-01",
+                location="growth-chamber-a",
+                value=690.0 + ((index % 10) - 4) * 28.0,
+                unit="ppm",
+                source="dummy-script",
+                note="Simulated baseline CO2 concentration",
+            )
+        )
+        sensor_records.append(
+            SensorRecord(
+                timestamp=timestamp,
+                sensor_type="tank_level",
+                sensor_id="tank-sim-01",
+                location="nutrient-tank-a",
+                value=72.0 - (index % 12) * 1.6,
+                unit="%",
+                source="dummy-script",
+                note="Simulated nutrient tank level",
+            )
+        )
 
     image_records = [
         ImageRecord(
@@ -111,4 +135,3 @@ def _write_dummy_svg(filename: str, title: str, background: str, foreground: str
         encoding="utf-8",
     )
     return Path("storage/images") / filename
-

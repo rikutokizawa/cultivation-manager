@@ -33,6 +33,14 @@ export type ImageRecord = {
 
 export type LatestStatus = {
   latest_temperature: SensorRecord | null;
+  latest_humidity: SensorRecord | null;
+  latest_co2: SensorRecord | null;
+  latest_tank_level: SensorRecord | null;
+  connection_status: {
+    overall_status: string;
+    checked_at: string;
+    source: string;
+    detail: string;
+  };
   latest_images: ImageRecord[];
 };
-

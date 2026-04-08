@@ -54,3 +54,6 @@ button {
   background-size: 28px 28px;
 }
 
+.dashboard-first-view {
+  min-height: calc(100vh - 13.5rem);
+}

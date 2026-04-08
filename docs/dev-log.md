@@ -39,3 +39,27 @@
 - `/export/sensor-records.csv` は temperature の CSV を返した。
 - frontend の `/`, `/manual-input`, `/export` は HTML 応答を返した。
 - ローカルポート bind はサンドボックス制限があるため、Codex からの確認では権限付き起動が必要だった。
+
+## 2026-04-07
+
+### 実施内容
+
+- `uv` が別環境へ install する場合の回避手順を README に追記
+- `frontend` のポート競合時の確認手順を README に追記
+- トラブルシュート文書を追加
+- dashboard のファーストビューを 1 画面集約レイアウトへ再設計
+- `humidity`, `co2`, `tank_level` のダミー時系列を追加
+- `latest-status` を温度、湿度、CO2、水位、接続状況、画像 2 枚を返す形に拡張
+- dashboard 上部の説明ブロックと `Local Mode` カードを削除
+
+### 実行確認
+
+- `next build`
+- `.venv/bin/python -c 'import fastapi, sqlalchemy'`
+- `.venv/bin/python -m backend.scripts.seed_dummy_data --reset`
+
+### 確認結果メモ
+
+- frontend build は成功
+- backend import は成功
+- seed 再投入により新しいダミーセンサ種別が入る状態に更新
