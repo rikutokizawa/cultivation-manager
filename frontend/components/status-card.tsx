@@ -7,10 +7,10 @@ type StatusCardProps = {
 };
 
 const accentClassMap = {
-  green: "from-leaf/15 to-white",
-  amber: "from-amber/20 to-white",
-  slate: "from-ink/10 to-white",
-  blue: "from-sky-100 to-white",
+  green: "shadow-[inset_0_0_0_1px_rgba(10,217,92,0.08)]",
+  amber: "shadow-[inset_0_0_0_1px_rgba(250,97,56,0.08)]",
+  slate: "shadow-[inset_0_0_0_1px_rgba(156,173,191,0.08)]",
+  blue: "shadow-[inset_0_0_0_1px_rgba(147,197,253,0.08)]",
 };
 
 export function StatusCard({
@@ -22,15 +22,15 @@ export function StatusCard({
 }: StatusCardProps) {
   return (
     <article
-      className={`rounded-[22px] border border-ink/10 bg-gradient-to-br ${accentClassMap[accent]} ${
+      className={`dashboard-card rounded-[8px] ${accentClassMap[accent]} ${
         compact ? "p-4" : "p-5"
       }`}
     >
-      <p className={`${compact ? "text-xs" : "text-sm"} font-medium text-ink/60`}>{label}</p>
-      <p className={`mt-3 ${compact ? "text-2xl" : "text-3xl"} font-semibold tracking-tight`}>
+      <p className={`${compact ? "text-xs" : "text-sm"} font-medium text-white/72`}>{label}</p>
+      <p className={`mt-2 ${compact ? "text-[26px]" : "text-3xl"} font-semibold tracking-tight text-white`}>
         {value}
       </p>
-      <p className="mt-2 text-sm text-ink/65">{meta}</p>
+      <p className="mt-2 text-[12px] text-[#9cadbf]">{meta}</p>
     </article>
   );
 }

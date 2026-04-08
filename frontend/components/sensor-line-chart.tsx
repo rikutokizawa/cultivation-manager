@@ -39,16 +39,16 @@ export function SensorLineChart({
     <div className="h-[280px] w-full">
       <ResponsiveContainer>
         <LineChart data={chartData} margin={{ left: 4, right: 18, top: 18, bottom: 4 }}>
-          <CartesianGrid stroke="rgba(19, 38, 29, 0.08)" strokeDasharray="4 4" />
+          <CartesianGrid stroke="rgba(84, 99, 113, 0.22)" strokeDasharray="4 4" />
           <XAxis
             dataKey="label"
-            tick={{ fill: "#496457", fontSize: 12 }}
+            tick={{ fill: "#9cadbf", fontSize: 12 }}
             tickLine={false}
             axisLine={false}
             minTickGap={24}
           />
           <YAxis
-            tick={{ fill: "#496457", fontSize: 12 }}
+            tick={{ fill: "#9cadbf", fontSize: 12 }}
             tickLine={false}
             axisLine={false}
             domain={["dataMin - 1", "dataMax + 1"]}
@@ -56,9 +56,10 @@ export function SensorLineChart({
           />
           <Tooltip
             contentStyle={{
-              borderRadius: 16,
-              border: "1px solid rgba(19, 38, 29, 0.08)",
-              backgroundColor: "rgba(255,255,255,0.96)",
+              borderRadius: 8,
+              border: "1px solid rgba(84, 99, 113, 0.4)",
+              backgroundColor: "rgba(31, 33, 35, 0.98)",
+              color: "#ffffff",
             }}
           />
           <Line

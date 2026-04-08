@@ -51,12 +51,15 @@
 - `humidity`, `co2`, `tank_level` のダミー時系列を追加
 - `latest-status` を温度、湿度、CO2、水位、接続状況、画像 2 枚を返す形に拡張
 - dashboard 上部の説明ブロックと `Local Mode` カードを削除
+- Figma 案を基準に dashboard をダーク基調の監視盤 UI へ更新
+- ナビ、カード、画像パネル、時系列セクションを Figma の情報設計へ寄せた
 
 ### 実行確認
 
 - `next build`
 - `.venv/bin/python -c 'import fastapi, sqlalchemy'`
 - `.venv/bin/python -m backend.scripts.seed_dummy_data --reset`
+- Figma ノード `71:10` のデザインとスクリーンショット取得
 
 ### 確認結果メモ
 
