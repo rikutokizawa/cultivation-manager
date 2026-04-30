@@ -1,0 +1,14 @@
+[Unit]
+Description=Cultivation Manager Runtime Collector
+After=network.target cultivation-backend.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/cultivation-manager
+EnvironmentFile=%h/cultivation-manager/.env
+ExecStart=%h/cultivation-manager/.venv/bin/python -m backend.scripts.run_runtime
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

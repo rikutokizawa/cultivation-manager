@@ -12,8 +12,11 @@ from backend.app.services.sensor_sources import build_sensor_source
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run sensor collection and image capture loops together.")
-    parser.add_argument("--sensor-source", choices=["dummy", "json"], help="Override sensor source.")
-    parser.add_argument("--camera-source", choices=["dummy", "directory"], help="Override camera source.")
+    parser.add_argument(
+        "--sensor-source",
+        help="Override sensor source. Supports dummy, json, command, onewire or comma-separated combinations.",
+    )
+    parser.add_argument("--camera-source", choices=["dummy", "directory", "rpi"], help="Override camera source.")
     parser.add_argument("--sensor-interval", type=int, help="Override sensor polling interval.")
     parser.add_argument("--camera-interval", type=int, help="Override image capture interval.")
     parser.add_argument("--cycles", type=int, help="Stop after N outer loop cycles.")

@@ -11,7 +11,7 @@ from backend.app.services.collection_pipeline import persist_captured_images
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Capture or ingest images and store image records.")
-    parser.add_argument("--source", choices=["dummy", "directory"], help="Camera source type.")
+    parser.add_argument("--source", choices=["dummy", "directory", "rpi"], help="Camera source type.")
     parser.add_argument("--loop", action="store_true", help="Run continuously.")
     parser.add_argument("--interval", type=int, help="Capture interval in seconds.")
     parser.add_argument("--iterations", type=int, help="Stop after N loops when --loop is enabled.")
@@ -50,4 +50,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

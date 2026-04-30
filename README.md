@@ -48,7 +48,37 @@ python -m backend.scripts.seed_dummy_data --reset
 python -m backend.scripts.collect_sensor_data --source dummy
 ```
 
-`SENSOR_SOURCE_TYPE=json` にすると、`SENSOR_INPUT_JSON_PATH` の JSON を読んで取り込めます。
+利用できる source:
+
+- `dummy`
+- `json`
+- `command`
+- `onewire`
+- `ondotori`
+- カンマ区切りで併用可
+  - 例: `dummy,onewire`
+
+補足:
+
+- `SENSOR_SOURCE_TYPE=json` にすると、`SENSOR_INPUT_JSON_PATH` の JSON を読んで取り込めます。
+- `SENSOR_SOURCE_TYPE=command` にすると、`SENSOR_COMMAND` の標準出力 JSON を読んで取り込めます。
+- `SENSOR_SOURCE_TYPE=onewire` にすると、`DS18B20_DEVICE_GLOB` の one-wire 温度センサを読みます。
+- `SENSOR_SOURCE_TYPE=ondotori` にすると、おんどとり WebStorage API の現在値を読みます。
+- command source の疎通確認には `backend/scripts/emit_sample_sensor_json.py` を使えます。
+
+おんどとり API の疎通確認:
+
+```bash
+cp .env.example .env
+# .env に ONDOTORI_API_KEY / ONDOTORI_LOGIN_ID / ONDOTORI_LOGIN_PASS を設定
+.venv/bin/python -m backend.scripts.collect_sensor_data --source ondotori
+```
+
+`ONDOTORI_LOGIN_ID` は API 仕様上の `login-id` で、おんどとり WebStorage の利用者IDまたは参照専用IDです。
+`ONDOTORI_LOGIN_PASS` はそのIDに対するパスワードです。
+現在値APIは `api-key`, `login-id`, `login-pass` が必須です。
+
+特定の子機だけ取得する場合は `.env` の `ONDOTORI_REMOTE_SERIALS_CSV` にカンマ区切りで指定します。
 
 ### 3. 画像取り込みを 1 回実行
 
@@ -56,7 +86,16 @@ python -m backend.scripts.collect_sensor_data --source dummy
 python -m backend.scripts.capture_images --source dummy
 ```
 
-`CAMERA_SOURCE_TYPE=directory` にすると、`INCOMING_IMAGE_PATH` 配下の画像を取り込みます。
+利用できる source:
+
+- `dummy`
+- `directory`
+- `rpi`
+
+補足:
+
+- `CAMERA_SOURCE_TYPE=directory` にすると、`INCOMING_IMAGE_PATH` 配下の画像を取り込みます。
+- `CAMERA_SOURCE_TYPE=rpi` にすると、`rpicam-still` または `libcamera-still` を使って Raspberry Pi カメラ撮影を行います。
 
 ### 4. センサ収集と画像取り込みを定期実行
 
@@ -73,6 +112,26 @@ python -m backend.scripts.run_runtime
 - `CAMERA_IDS_CSV`
 - `SENSOR_INPUT_JSON_PATH`
 - `INCOMING_IMAGE_PATH`
+- `SENSOR_COMMAND`
+- `ONDOTORI_API_KEY`
+- `ONDOTORI_LOGIN_ID`
+- `ONDOTORI_LOGIN_PASS`
+- `ONDOTORI_REMOTE_SERIALS_CSV`
+- `ONDOTORI_BASE_SERIALS_CSV`
+- `DS18B20_DEVICE_GLOB`
+- `CAMERA_COMMAND`
+- `CAMERA_CAPTURE_TIMEOUT_MS`
+- `CAMERA_CAPTURE_WIDTH`
+- `CAMERA_CAPTURE_HEIGHT`
+- `CAMERA_EXTRA_ARGS`
+
+### 5. Raspberry Pi 実行前チェック
+
+```bash
+python -m backend.scripts.check_runtime_environment
+```
+
+Pi 上で `rpicam-still` が見えているか、one-wire のパスが見えているか、必要ディレクトリがあるかを確認できます。
 
 ## Frontend 起動
 
@@ -136,12 +195,20 @@ Pi へ持っていく時点で既に揃っているもの:
 - 定期収集 / 定期画像取り込みの実行プログラム
 - ダミー source と file/directory source の切替機構
 - upload-image API
+- Pi カメラ source と DS18B20 one-wire source
+- command source による外部スクリプト連携
+- systemd テンプレート
 
 Pi で後から差し替えるもの:
 
 - 実センサ読み取り処理
 - 実カメラ撮影処理
 - systemd / cron の本番設定
+
+systemd テンプレート:
+
+- [`deploy/systemd/cultivation-backend.service`](/Users/kizawarikuto/workspace/active/college/cultivation-manager/deploy/systemd/cultivation-backend.service)
+- [`deploy/systemd/cultivation-runtime.service`](/Users/kizawarikuto/workspace/active/college/cultivation-manager/deploy/systemd/cultivation-runtime.service)
 
 ## Docs
 

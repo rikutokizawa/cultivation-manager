@@ -12,7 +12,10 @@ from backend.app.services.sensor_sources import build_sensor_source
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Collect sensor readings and store them in SQLite.")
-    parser.add_argument("--source", choices=["dummy", "json"], help="Sensor source type.")
+    parser.add_argument(
+        "--source",
+        help="Sensor source type. Supports dummy, json, command, onewire or comma-separated combinations.",
+    )
     parser.add_argument("--json-path", help="JSON file used when source=json.")
     parser.add_argument("--loop", action="store_true", help="Run continuously.")
     parser.add_argument("--interval", type=int, help="Polling interval in seconds.")
@@ -56,4 +59,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

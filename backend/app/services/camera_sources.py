@@ -1,7 +1,10 @@
+import shlex
 import shutil
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
+from shutil import which
 
 from backend.app.core.config import Settings
 from backend.app.services.runtime_models import CapturedImage
@@ -133,6 +136,70 @@ class DirectoryCameraSource:
         return max(candidates, key=lambda path: path.stat().st_mtime)
 
 
+class RaspberryPiCameraSource:
+    def __init__(self, settings: Settings):
+        self.settings = settings
+
+    def capture(self) -> list[CapturedImage]:
+        executable = self._resolve_executable()
+        now = datetime.now(UTC)
+        captures: list[CapturedImage] = []
+
+        for camera_index, camera_id in enumerate(self.settings.camera_ids):
+            target_name = f"{camera_id}-{now.strftime('%Y%m%d%H%M%S')}.jpg"
+            target_path = self.settings.resolved_image_storage_path / target_name
+            command = [
+                executable,
+                "--output",
+                str(target_path),
+                "--timeout",
+                str(self.settings.camera_capture_timeout_ms),
+                "--width",
+                str(self.settings.camera_capture_width),
+                "--height",
+                str(self.settings.camera_capture_height),
+                "--camera",
+                str(camera_index),
+                "--nopreview",
+            ]
+            if self.settings.camera_extra_args.strip():
+                command.extend(shlex.split(self.settings.camera_extra_args))
+
+            subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=self.settings.camera_command_timeout_seconds,
+                check=True,
+            )
+
+            captures.append(
+                CapturedImage(
+                    timestamp=now,
+                    camera_id=camera_id,
+                    location=CAMERA_LOCATIONS.get(camera_id, camera_id),
+                    file_path=str(Path("storage/images") / target_name),
+                    note=f"Captured with {Path(executable).name}",
+                )
+            )
+
+        return captures
+
+    def _resolve_executable(self) -> str:
+        if self.settings.camera_command.strip():
+            return self.settings.camera_command
+
+        for candidate in ("rpicam-still", "libcamera-still"):
+            resolved = which(candidate)
+            if resolved:
+                return resolved
+
+        raise FileNotFoundError(
+            "Neither rpicam-still nor libcamera-still was found. "
+            "Set CAMERA_COMMAND or install Raspberry Pi camera software."
+        )
+
+
 def build_camera_source(settings: Settings, source_type: str | None = None) -> CameraSource:
     selected_source = (source_type or settings.camera_source_type).lower()
 
@@ -140,6 +207,7 @@ def build_camera_source(settings: Settings, source_type: str | None = None) -> C
         return DummyCameraSource(settings)
     if selected_source == "directory":
         return DirectoryCameraSource(settings)
+    if selected_source == "rpi":
+        return RaspberryPiCameraSource(settings)
 
     raise ValueError(f"Unsupported camera source type: {selected_source}")
-

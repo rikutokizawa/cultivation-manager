@@ -1,0 +1,15 @@
+[Unit]
+Description=Cultivation Manager FastAPI Backend
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/cultivation-manager
+EnvironmentFile=%h/cultivation-manager/.env
+ExecStart=%h/cultivation-manager/.venv/bin/python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+

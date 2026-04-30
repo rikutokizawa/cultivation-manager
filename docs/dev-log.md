@@ -76,6 +76,9 @@
 - `collect_sensor_data.py`, `capture_images.py`, `run_runtime.py` を追加
 - `POST /upload-image` と `GET /dashboard/summary` を追加
 - runtime プログラムの README と docs を追加
+- DS18B20 one-wire source を追加
+- Raspberry Pi camera source を追加
+- runtime 環境確認スクリプトと systemd テンプレートを追加
 
 ### 実行確認
 
@@ -85,6 +88,9 @@
 - `.venv/bin/python -m backend.scripts.run_runtime --cycles 2`
 - `GET /dashboard/summary`
 - `POST /upload-image`
+- `.venv/bin/python -m backend.scripts.check_runtime_environment`
+- `.venv/bin/python -m backend.scripts.collect_sensor_data --source dummy,onewire`
+- `SENSOR_COMMAND='.venv/bin/python -m backend.scripts.emit_sample_sensor_json' .venv/bin/python -m backend.scripts.collect_sensor_data --source command`
 
 ### 確認結果メモ
 
@@ -95,3 +101,6 @@
 - runtime ランナーで sensor / image の両方を定期実行できた
 - `dashboard/summary` は件数と source 種別を返した
 - `upload-image` は multipart 画像登録で `image_records` に保存できた
+- runtime 環境確認スクリプトは Pi 依存コマンド有無を JSON で返した
+- `dummy,onewire` の複合 source は Mac 上では one-wire が空、dummy が 4 件保存で動作した
+- `command` source は sample emitter から 2 件保存で動作した

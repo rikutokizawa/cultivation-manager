@@ -16,6 +16,23 @@ class Settings(BaseSettings):
     backend_port: int = 8000
     sensor_source_type: str = "dummy"
     camera_source_type: str = "dummy"
+    sensor_command: str = ""
+    sensor_command_timeout_seconds: int = 30
+    ondotori_api_key: str = ""
+    ondotori_login_id: str = ""
+    ondotori_login_pass: str = ""
+    ondotori_api_url: str = "https://api.webstorage.jp:443/v1/devices/current"
+    ondotori_remote_serials_csv: str = ""
+    ondotori_base_serials_csv: str = ""
+    ondotori_timeout_seconds: int = 30
+    ds18b20_device_glob: str = "/sys/bus/w1/devices/28-*/w1_slave"
+    ds18b20_location_prefix: str = "water-probe"
+    camera_command: str = ""
+    camera_command_timeout_seconds: int = 30
+    camera_capture_timeout_ms: int = 1000
+    camera_capture_width: int = 1280
+    camera_capture_height: int = 720
+    camera_extra_args: str = ""
     sensor_poll_interval_seconds: int = 300
     image_capture_interval_seconds: int = 900
     camera_ids_csv: str = "camera-01,camera-02"
@@ -59,6 +76,14 @@ class Settings(BaseSettings):
     @property
     def camera_ids(self) -> list[str]:
         return [camera_id.strip() for camera_id in self.camera_ids_csv.split(",") if camera_id.strip()]
+
+    @property
+    def ondotori_remote_serials(self) -> list[str]:
+        return [serial.strip() for serial in self.ondotori_remote_serials_csv.split(",") if serial.strip()]
+
+    @property
+    def ondotori_base_serials(self) -> list[str]:
+        return [serial.strip() for serial in self.ondotori_base_serials_csv.split(",") if serial.strip()]
 
     def ensure_directories(self) -> None:
         self.resolved_image_storage_path.mkdir(parents=True, exist_ok=True)
