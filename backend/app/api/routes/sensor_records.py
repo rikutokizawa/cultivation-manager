@@ -14,6 +14,7 @@ router = APIRouter()
 @router.get("", response_model=list[SensorRecordRead])
 def list_sensor_records(
     sensor_type: str | None = None,
+    source: str | None = None,
     start_at: datetime | None = None,
     end_at: datetime | None = None,
     limit: int = Query(default=200, ge=1, le=2000),
@@ -23,12 +24,14 @@ def list_sensor_records(
 
     if sensor_type:
         statement = statement.filter(SensorRecord.sensor_type == sensor_type)
+    if source:
+        statement = statement.filter(SensorRecord.source == source)
     if start_at:
         statement = statement.filter(SensorRecord.timestamp >= start_at)
     if end_at:
         statement = statement.filter(SensorRecord.timestamp <= end_at)
 
-    statement = statement.order_by(SensorRecord.timestamp.desc()).limit(limit)
+    statement = statement.order_by(SensorRecord.timestamp.desc(), SensorRecord.id.desc()).limit(limit)
     return list(db.scalars(statement).all())
 
 

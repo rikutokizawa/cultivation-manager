@@ -32,10 +32,17 @@ export function getTemperatureSeries(limit = 48) {
   );
 }
 
-export function getSensorSeries(sensorType: string, limit = 48) {
-  return requestJson<SensorRecord[]>(
-    `/sensor-records?sensor_type=${encodeURIComponent(sensorType)}&limit=${limit}`,
-  );
+export function getSensorSeries(sensorType: string, limit = 48, source?: string) {
+  const searchParams = new URLSearchParams({
+    sensor_type: sensorType,
+    limit: String(limit),
+  });
+
+  if (source) {
+    searchParams.set("source", source);
+  }
+
+  return requestJson<SensorRecord[]>(`/sensor-records?${searchParams.toString()}`);
 }
 
 export function getManualRecords(limit = 10) {

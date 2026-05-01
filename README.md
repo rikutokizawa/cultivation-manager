@@ -80,6 +80,15 @@ cp .env.example .env
 
 特定の子機だけ取得する場合は `.env` の `ONDOTORI_REMOTE_SERIALS_CSV` にカンマ区切りで指定します。
 
+ダッシュボードへ継続反映する場合:
+
+```bash
+.venv/bin/python -m backend.scripts.collect_sensor_data --source ondotori --loop --interval 60
+```
+
+おんどとり現在値APIのレートリミットは 10回/120秒 なので、開発中も 15 秒未満の取得間隔にはしないでください。
+画面側は backend の保存済みデータを 60 秒ごとに再取得します。
+
 ### 3. 画像取り込みを 1 回実行
 
 ```bash

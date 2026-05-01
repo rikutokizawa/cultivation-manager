@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { formatJapanChartLabel } from "@/lib/datetime";
 import type { SensorRecord } from "@/types/api";
 
 type SensorLineChartProps = {
@@ -17,11 +18,6 @@ type SensorLineChartProps = {
   unit: string;
   color: string;
 };
-
-function formatLabel(timestamp: string) {
-  const date = new Date(timestamp);
-  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:00`;
-}
 
 export function SensorLineChart({
   records,
@@ -31,7 +27,7 @@ export function SensorLineChart({
   const chartData = [...records]
     .reverse()
     .map((record) => ({
-      label: formatLabel(record.timestamp),
+      label: formatJapanChartLabel(record.timestamp),
       value: Number(record.value.toFixed(2)),
     }));
 

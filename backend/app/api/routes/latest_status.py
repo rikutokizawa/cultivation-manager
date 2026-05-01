@@ -17,7 +17,7 @@ def get_latest_metric(db: Session, sensor_type: str) -> SensorRecord | None:
     return db.scalar(
         select(SensorRecord)
         .filter(SensorRecord.sensor_type == sensor_type)
-        .order_by(SensorRecord.timestamp.desc())
+        .order_by(SensorRecord.timestamp.desc(), SensorRecord.id.desc())
         .limit(1)
     )
 
