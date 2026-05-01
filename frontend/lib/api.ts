@@ -32,7 +32,15 @@ export function getTemperatureSeries(limit = 48) {
   );
 }
 
-export function getSensorSeries(sensorType: string, limit = 48, source?: string) {
+export function getSensorSeries(
+  sensorType: string,
+  limit = 48,
+  source?: string,
+  params?: {
+    startAt?: string;
+    endAt?: string;
+  },
+) {
   const searchParams = new URLSearchParams({
     sensor_type: sensorType,
     limit: String(limit),
@@ -40,6 +48,12 @@ export function getSensorSeries(sensorType: string, limit = 48, source?: string)
 
   if (source) {
     searchParams.set("source", source);
+  }
+  if (params?.startAt) {
+    searchParams.set("start_at", params.startAt);
+  }
+  if (params?.endAt) {
+    searchParams.set("end_at", params.endAt);
   }
 
   return requestJson<SensorRecord[]>(`/sensor-records?${searchParams.toString()}`);

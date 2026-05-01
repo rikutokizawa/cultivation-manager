@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { LatestImages } from "@/components/latest-images";
+import { OndotoriTrendExplorer } from "@/components/ondotori-trend-explorer";
 import { SectionCard } from "@/components/section-card";
 import { SensorLineChart } from "@/components/sensor-line-chart";
 import { StatusCard } from "@/components/status-card";
@@ -25,6 +26,7 @@ type DashboardRealtimeProps = {
 
 const refreshIntervalMs = 60_000;
 const ondotoriSource = "ondotori-current";
+const labelStorageKey = "cultivation-manager:ondotori-device-labels";
 const ondotoriMetricOrder = ["co2", "temperature", "humidity"] as const;
 const metricLabels: Record<string, string> = {
   co2: "CO2",
@@ -48,6 +50,10 @@ function formatDeviceName(location: string) {
 function formatDeviceContext(location: string) {
   const parts = location.split("/").map((part) => part.trim()).filter(Boolean);
   return parts.length > 1 ? parts.slice(0, -1).join(" / ") : location;
+}
+
+function deviceKeyFromRecord(record: SensorRecord) {
+  return record.sensor_id.split("-ch")[0] || record.location;
 }
 
 function latestByLocation(records: SensorRecord[]) {
@@ -109,6 +115,7 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
   const [data, setData] = useState(initialData);
   const [lastSyncedAt, setLastSyncedAt] = useState(() => new Date());
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [deviceLabels, setDeviceLabels] = useState<Record<string, string>>({});
 
   const latestOndotori = useMemo(
     () => ({
@@ -146,6 +153,23 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
       window.clearInterval(intervalId);
     };
   }, []);
+
+  useEffect(() => {
+    const storedLabels = window.localStorage.getItem(labelStorageKey);
+    if (!storedLabels) {
+      return;
+    }
+
+    try {
+      setDeviceLabels(JSON.parse(storedLabels) as Record<string, string>);
+    } catch {
+      setDeviceLabels({});
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(labelStorageKey, JSON.stringify(deviceLabels));
+  }, [deviceLabels]);
 
   const summaryMetrics = useMemo(
     () => [
@@ -228,8 +252,58 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
         records: Object.fromEntries(
           ondotoriMetricOrder.map((sensorType) => [sensorType, byType[sensorType].get(location)]),
         ) as Record<(typeof ondotoriMetricOrder)[number], SensorRecord | undefined>,
-      }));
+      }))
+      .map((device) => {
+        const firstRecord = ondotoriMetricOrder
+          .map((sensorType) => device.records[sensorType])
+          .find((record): record is SensorRecord => Boolean(record));
+
+        return {
+          ...device,
+          key: firstRecord ? deviceKeyFromRecord(firstRecord) : device.location,
+        };
+      });
   }, [data]);
+
+  const labelAverages = useMemo(() => {
+    const groupedDevices = new Map<string, typeof deviceGroups>();
+
+    for (const device of deviceGroups) {
+      const label = deviceLabels[device.key]?.trim();
+      if (!label) {
+        continue;
+      }
+      groupedDevices.set(label, [...(groupedDevices.get(label) ?? []), device]);
+    }
+
+    const availableMetrics = ondotoriMetricOrder.filter((sensorType) =>
+      deviceGroups.some((device) => Boolean(device.records[sensorType])),
+    );
+
+    return Array.from(groupedDevices.entries()).map(([label, devices]) => ({
+      label,
+      devices,
+      metrics: availableMetrics.map((sensorType) => {
+        const values = devices
+          .map((device) => device.records[sensorType])
+          .filter((record): record is SensorRecord => Boolean(record));
+        const average =
+          values.length > 0
+            ? values.reduce((sum, record) => sum + record.value, 0) / values.length
+            : undefined;
+        const latestTimestamp = latestRecord(values)?.timestamp;
+        const unit = values[0]?.unit;
+
+        return {
+          sensorType,
+          average,
+          unit,
+          count: values.length,
+          latestTimestamp,
+        };
+      }),
+    }));
+  }, [deviceGroups, deviceLabels]);
 
   return (
     <div className="space-y-8">
@@ -282,6 +356,60 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
             </div>
           </div>
         </div>
+
+        <div className="dashboard-card rounded-[8px] p-4">
+          <div className="mb-4 flex flex-col gap-2 border-b border-white/10 pb-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="dashboard-section-title text-[20px]">ラベル別 最新平均</h2>
+              <p className="mt-1 text-sm text-[#9cadbf]">
+                機器別最新値で同じ位置ラベルを付けた機器の最新値を平均します。
+              </p>
+            </div>
+            <span className="text-xs text-[#9cadbf]">おんどとり項目のみ</span>
+          </div>
+
+          {labelAverages.length > 0 ? (
+            <div className="grid gap-3 lg:grid-cols-3">
+              {labelAverages.map((area) => (
+                <article key={area.label} className="rounded-[8px] border border-white/10 bg-white/[0.03] p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-semibold text-white">{area.label}</h3>
+                      <p className="mt-1 text-xs text-[#9cadbf]">
+                        {area.devices.map((device) => device.deviceName).join(" / ")}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-[#9cadbf]">
+                      {area.devices.length}機器
+                    </span>
+                  </div>
+                  <div className="mt-3 grid gap-2">
+                    {area.metrics.map((metric) => (
+                      <div key={metric.sensorType} className="flex items-start justify-between gap-3 text-sm">
+                        <span className="text-[#9cadbf]">{metricLabels[metric.sensorType]}</span>
+                        <span className="text-right font-semibold text-white">
+                          {formatMetric(
+                            metric.average,
+                            metric.unit,
+                            metric.sensorType === "co2" ? 0 : 1,
+                          )}
+                          <span className="ml-2 text-xs font-normal text-[#9cadbf]">n={metric.count}</span>
+                          <span className="block text-[11px] font-normal text-[#9cadbf]">
+                            {formatJapanDateTime(metric.latestTimestamp, { seconds: true })}
+                          </span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[#9cadbf]">
+              機器別最新値で位置ラベルを入力すると、ここにラベル別平均が表示されます。
+            </p>
+          )}
+        </div>
       </section>
 
       <section className="space-y-4">
@@ -301,6 +429,17 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
                 </p>
                 <h3 className="mt-2 text-xl font-semibold text-white">{device.deviceName}</h3>
                 <p className="mt-1 text-sm text-[#9cadbf]">{device.context}</p>
+                <input
+                  value={deviceLabels[device.key] ?? ""}
+                  onChange={(event) =>
+                    setDeviceLabels((current) => ({
+                      ...current,
+                      [device.key]: event.target.value,
+                    }))
+                  }
+                  placeholder="位置ラベル（例: Aエリア）"
+                  className="mt-3 w-full rounded-[8px] border border-white/10 bg-[#1f2123] px-3 py-2 text-sm text-white outline-none placeholder:text-[#9cadbf]/60"
+                />
               </div>
 
               <div className="mt-4 grid gap-3">
@@ -318,7 +457,7 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
                             {metricLabels[sensorType]}
                           </p>
                           <p className="mt-1 text-lg font-semibold text-white">
-                          {record ? formatMetric(record.value, record.unit, sensorType === "co2" ? 0 : 1) : "--"}
+                            {record ? formatMetric(record.value, record.unit, sensorType === "co2" ? 0 : 1) : "--"}
                           </p>
                         </div>
                         {record ? (
@@ -341,6 +480,15 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
           ))}
         </div>
       </section>
+
+      <OndotoriTrendExplorer
+        deviceLabels={deviceLabels}
+        initialRecords={{
+          temperature: data.temperatureRecords,
+          humidity: data.humidityRecords,
+          co2: data.co2Records,
+        }}
+      />
 
       <section id="timeseries" className="space-y-8">
         <div>
