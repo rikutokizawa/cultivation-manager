@@ -20,7 +20,7 @@ type PeriodKey = "1h" | "6h" | "24h" | "7d";
 type ViewMode = "metric" | "device";
 
 type OndotoriTrendExplorerProps = {
-  deviceLabels: Record<string, string>;
+  deviceLabels: Record<string, string[]>;
   initialRecords: Record<MetricKey, SensorRecord[]>;
 };
 
@@ -55,6 +55,10 @@ const seriesColors = [
   "#d8f28a",
   "#f0b7d8",
 ];
+
+function formatDeviceLabelPrefix(labels: string[] | undefined) {
+  return labels && labels.length > 0 ? `${labels.join(" / ")} / ` : "";
+}
 
 function deviceKeyFromRecord(record: SensorRecord) {
   return record.sensor_id.split("-ch")[0] || record.location;
@@ -173,7 +177,7 @@ export function OndotoriTrendExplorer({
             .filter((device) => selectedDeviceSet.has(device.key))
             .map((device, index) => ({
               key: `device-${device.key}`,
-              name: deviceLabels[device.key] ? `${deviceLabels[device.key]} / ${device.name}` : device.name,
+              name: `${formatDeviceLabelPrefix(deviceLabels[device.key])}${device.name}`,
               color: seriesColors[index % seriesColors.length],
             }))
         : metrics
@@ -224,6 +228,11 @@ export function OndotoriTrendExplorer({
     selectedMetricSet,
     viewMode,
   ]);
+
+  const selectedDevice = useMemo(
+    () => devices.find((device) => device.key === selectedDeviceKey),
+    [devices, selectedDeviceKey],
+  );
 
   return (
     <section className="space-y-5">
@@ -315,7 +324,8 @@ export function OndotoriTrendExplorer({
               >
                 {devices.map((device) => (
                   <option key={device.key} value={device.key}>
-                    {deviceLabels[device.key] ? `${deviceLabels[device.key]} / ${device.name}` : device.name}
+                    {formatDeviceLabelPrefix(deviceLabels[device.key])}
+                    {device.name}
                   </option>
                 ))}
               </select>
@@ -352,7 +362,8 @@ export function OndotoriTrendExplorer({
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold text-white">
-                    {deviceLabels[device.key] ? `${deviceLabels[device.key]} / ${device.name}` : device.name}
+                    {formatDeviceLabelPrefix(deviceLabels[device.key])}
+                    {device.name}
                   </span>
                   <span className="block text-xs text-[#9cadbf]">{device.context}</span>
                 </span>
@@ -370,7 +381,7 @@ export function OndotoriTrendExplorer({
               <h3 className="mt-2 text-xl font-semibold text-white">
                 {viewMode === "metric"
                   ? `${metricConfig[selectedMetric].label} / 機器別`
-                  : `${devices.find((device) => device.key === selectedDeviceKey)?.name ?? "機器"} / 項目別`}
+                  : `${selectedDevice ? `${formatDeviceLabelPrefix(deviceLabels[selectedDevice.key])}${selectedDevice.name}` : "機器"} / 項目別`}
               </h3>
             </div>
             <p className="text-sm text-[#9cadbf]">{periods[period].label}</p>

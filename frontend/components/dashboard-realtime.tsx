@@ -24,6 +24,8 @@ type DashboardRealtimeProps = {
   initialData: DashboardData;
 };
 
+type DeviceLabels = Record<string, string[]>;
+
 const refreshIntervalMs = 60_000;
 const ondotoriSource = "ondotori-current";
 const labelStorageKey = "cultivation-manager:ondotori-device-labels";
@@ -54,6 +56,43 @@ function formatDeviceContext(location: string) {
 
 function deviceKeyFromRecord(record: SensorRecord) {
   return record.sensor_id.split("-ch")[0] || record.location;
+}
+
+function parseLabelInput(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(/[,\n、]/)
+        .map((label) => label.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function formatLabelInput(labels: string[] | undefined) {
+  return labels?.join(", ") ?? "";
+}
+
+function formatDeviceLabelPrefix(labels: string[] | undefined) {
+  return labels && labels.length > 0 ? `${labels.join(" / ")} / ` : "";
+}
+
+function normalizeStoredLabels(payload: unknown): DeviceLabels {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(payload as Record<string, unknown>).map(([deviceKey, value]) => {
+      if (Array.isArray(value)) {
+        return [deviceKey, value.map(String).map((label) => label.trim()).filter(Boolean)];
+      }
+      if (typeof value === "string") {
+        return [deviceKey, parseLabelInput(value)];
+      }
+      return [deviceKey, []];
+    }),
+  );
 }
 
 function latestByLocation(records: SensorRecord[]) {
@@ -115,7 +154,7 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
   const [data, setData] = useState(initialData);
   const [lastSyncedAt, setLastSyncedAt] = useState(() => new Date());
   const [syncError, setSyncError] = useState<string | null>(null);
-  const [deviceLabels, setDeviceLabels] = useState<Record<string, string>>({});
+  const [deviceLabels, setDeviceLabels] = useState<DeviceLabels>({});
 
   const latestOndotori = useMemo(
     () => ({
@@ -161,7 +200,7 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
     }
 
     try {
-      setDeviceLabels(JSON.parse(storedLabels) as Record<string, string>);
+      setDeviceLabels(normalizeStoredLabels(JSON.parse(storedLabels)));
     } catch {
       setDeviceLabels({});
     }
@@ -269,11 +308,10 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
     const groupedDevices = new Map<string, typeof deviceGroups>();
 
     for (const device of deviceGroups) {
-      const label = deviceLabels[device.key]?.trim();
-      if (!label) {
-        continue;
+      const labels = deviceLabels[device.key] ?? [];
+      for (const label of labels) {
+        groupedDevices.set(label, [...(groupedDevices.get(label) ?? []), device]);
       }
-      groupedDevices.set(label, [...(groupedDevices.get(label) ?? []), device]);
     }
 
     const availableMetrics = ondotoriMetricOrder.filter((sensorType) =>
@@ -430,16 +468,28 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
                 <h3 className="mt-2 text-xl font-semibold text-white">{device.deviceName}</h3>
                 <p className="mt-1 text-sm text-[#9cadbf]">{device.context}</p>
                 <input
-                  value={deviceLabels[device.key] ?? ""}
+                  value={formatLabelInput(deviceLabels[device.key])}
                   onChange={(event) =>
                     setDeviceLabels((current) => ({
                       ...current,
-                      [device.key]: event.target.value,
+                      [device.key]: parseLabelInput(event.target.value),
                     }))
                   }
-                  placeholder="位置ラベル（例: Aエリア）"
+                  placeholder="位置ラベル（例: Aエリア, Bエリア）"
                   className="mt-3 w-full rounded-[8px] border border-white/10 bg-[#1f2123] px-3 py-2 text-sm text-white outline-none placeholder:text-[#9cadbf]/60"
                 />
+                {deviceLabels[device.key]?.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {deviceLabels[device.key].map((label) => (
+                      <span
+                        key={label}
+                        className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-[#d7e1eb]"
+                      >
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               <div className="mt-4 grid gap-3">
