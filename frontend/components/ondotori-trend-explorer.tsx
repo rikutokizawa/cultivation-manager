@@ -13,14 +13,22 @@ import {
 
 import { getSensorSeries } from "@/lib/api";
 import { compareBackendTimestamps, formatJapanChartLabel, formatJapanDateTime } from "@/lib/datetime";
+import {
+  type DeviceLabels,
+  type OndotoriMetricKey,
+  deviceKeyFromRecord,
+  formatDeviceLabelPrefix,
+  ondotoriMetrics,
+  ondotoriSource,
+} from "@/lib/ondotori";
 import type { SensorRecord } from "@/types/api";
 
-type MetricKey = "temperature" | "humidity" | "co2";
+type MetricKey = OndotoriMetricKey;
 type PeriodKey = "1h" | "6h" | "24h" | "7d";
 type ViewMode = "metric" | "device";
 
 type OndotoriTrendExplorerProps = {
-  deviceLabels: Record<string, string[]>;
+  deviceLabels: DeviceLabels;
   initialRecords: Record<MetricKey, SensorRecord[]>;
 };
 
@@ -31,14 +39,11 @@ type Device = {
   location: string;
 };
 
-const ondotoriSource = "ondotori-current";
 const refreshIntervalMs = 60_000;
-const metrics: MetricKey[] = ["temperature", "humidity", "co2"];
-const metricConfig: Record<MetricKey, { label: string; unit: string; digits: number; color: string }> = {
-  temperature: { label: "温度", unit: "C", digits: 1, color: "#c8def5" },
-  humidity: { label: "湿度", unit: "%", digits: 1, color: "#abcdf1" },
-  co2: { label: "CO2", unit: "ppm", digits: 0, color: "#f8c471" },
-};
+const metrics = ondotoriMetrics.map((metric) => metric.key);
+const metricConfig = Object.fromEntries(
+  ondotoriMetrics.map((metric) => [metric.key, metric]),
+) as Record<MetricKey, (typeof ondotoriMetrics)[number]>;
 const periods: Record<PeriodKey, { label: string; hours: number }> = {
   "1h": { label: "1時間", hours: 1 },
   "6h": { label: "6時間", hours: 6 },
@@ -55,14 +60,6 @@ const seriesColors = [
   "#d8f28a",
   "#f0b7d8",
 ];
-
-function formatDeviceLabelPrefix(labels: string[] | undefined) {
-  return labels && labels.length > 0 ? `${labels.join(" / ")} / ` : "";
-}
-
-function deviceKeyFromRecord(record: SensorRecord) {
-  return record.sensor_id.split("-ch")[0] || record.location;
-}
 
 function deviceNameFromLocation(location: string) {
   return location.split("/").map((part) => part.trim()).filter(Boolean).at(-1) ?? location;

@@ -10,6 +10,18 @@ import { SensorLineChart } from "@/components/sensor-line-chart";
 import { StatusCard } from "@/components/status-card";
 import { getLatestStatus, getSensorSeries } from "@/lib/api";
 import { compareBackendTimestamps, formatJapanDateTime } from "@/lib/datetime";
+import {
+  type DeviceLabels,
+  deviceKeyFromRecord,
+  formatLabelInput,
+  formatMetricValue,
+  latestRecord,
+  normalizeStoredLabels,
+  ondotoriLabelStorageKey,
+  ondotoriMetrics,
+  ondotoriSource,
+  parseLabelInput,
+} from "@/lib/ondotori";
 import type { LatestStatus, SensorRecord } from "@/types/api";
 
 type DashboardData = {
@@ -24,12 +36,9 @@ type DashboardRealtimeProps = {
   initialData: DashboardData;
 };
 
-type DeviceLabels = Record<string, string[]>;
-
 const refreshIntervalMs = 60_000;
-const ondotoriSource = "ondotori-current";
-const labelStorageKey = "cultivation-manager:ondotori-device-labels";
-const ondotoriMetricOrder = ["co2", "temperature", "humidity"] as const;
+const ondotoriMetricOrder = ondotoriMetrics.map((metric) => metric.key);
+type OndotoriMetricKey = (typeof ondotoriMetricOrder)[number];
 const metricLabels: Record<string, string> = {
   co2: "CO2",
   temperature: "Temperature",
@@ -38,11 +47,7 @@ const metricLabels: Record<string, string> = {
 };
 
 function formatMetric(value: number | undefined, unit: string | undefined, digits = 1) {
-  if (value === undefined || !unit) {
-    return "--";
-  }
-
-  return `${value.toFixed(digits)} ${unit}`;
+  return formatMetricValue(value, unit, digits);
 }
 
 function formatDeviceName(location: string) {
@@ -52,47 +57,6 @@ function formatDeviceName(location: string) {
 function formatDeviceContext(location: string) {
   const parts = location.split("/").map((part) => part.trim()).filter(Boolean);
   return parts.length > 1 ? parts.slice(0, -1).join(" / ") : location;
-}
-
-function deviceKeyFromRecord(record: SensorRecord) {
-  return record.sensor_id.split("-ch")[0] || record.location;
-}
-
-function parseLabelInput(value: string) {
-  return Array.from(
-    new Set(
-      value
-        .split(/[,\n、]/)
-        .map((label) => label.trim())
-        .filter(Boolean),
-    ),
-  );
-}
-
-function formatLabelInput(labels: string[] | undefined) {
-  return labels?.join(", ") ?? "";
-}
-
-function formatDeviceLabelPrefix(labels: string[] | undefined) {
-  return labels && labels.length > 0 ? `${labels.join(" / ")} / ` : "";
-}
-
-function normalizeStoredLabels(payload: unknown): DeviceLabels {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return {};
-  }
-
-  return Object.fromEntries(
-    Object.entries(payload as Record<string, unknown>).map(([deviceKey, value]) => {
-      if (Array.isArray(value)) {
-        return [deviceKey, value.map(String).map((label) => label.trim()).filter(Boolean)];
-      }
-      if (typeof value === "string") {
-        return [deviceKey, parseLabelInput(value)];
-      }
-      return [deviceKey, []];
-    }),
-  );
 }
 
 function latestByLocation(records: SensorRecord[]) {
@@ -110,20 +74,6 @@ function latestByLocation(records: SensorRecord[]) {
   }
 
   return latestMap;
-}
-
-function latestRecord(records: SensorRecord[]) {
-  return records.reduce<SensorRecord | undefined>((latest, record) => {
-    if (
-      !latest ||
-      compareBackendTimestamps(record.timestamp, latest.timestamp) > 0 ||
-      (record.timestamp === latest.timestamp && record.id > latest.id)
-    ) {
-      return record;
-    }
-
-    return latest;
-  }, undefined);
 }
 
 async function fetchDashboardData(): Promise<DashboardData> {
@@ -194,7 +144,7 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
   }, []);
 
   useEffect(() => {
-    const storedLabels = window.localStorage.getItem(labelStorageKey);
+    const storedLabels = window.localStorage.getItem(ondotoriLabelStorageKey);
     if (!storedLabels) {
       return;
     }
@@ -207,7 +157,7 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(labelStorageKey, JSON.stringify(deviceLabels));
+    window.localStorage.setItem(ondotoriLabelStorageKey, JSON.stringify(deviceLabels));
   }, [deviceLabels]);
 
   const summaryMetrics = useMemo(
@@ -290,7 +240,7 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
         context: formatDeviceContext(location),
         records: Object.fromEntries(
           ondotoriMetricOrder.map((sensorType) => [sensorType, byType[sensorType].get(location)]),
-        ) as Record<(typeof ondotoriMetricOrder)[number], SensorRecord | undefined>,
+        ) as Record<OndotoriMetricKey, SensorRecord | undefined>,
       }))
       .map((device) => {
         const firstRecord = ondotoriMetricOrder
