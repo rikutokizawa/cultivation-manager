@@ -40,8 +40,8 @@ def latest_status(db: Session = Depends(get_db)) -> LatestStatusResponse:
         connection_status=ConnectionStatus(
             overall_status="online",
             checked_at=datetime.now(UTC),
-            source="local-simulator",
-            detail="API, sensor simulator, image storage are reachable in local development mode.",
+            source="backend-db",
+            detail="API and local storage are reachable.",
         ),
         latest_images=[ImageRecordRead.model_validate(image) for image in latest_images],
     )

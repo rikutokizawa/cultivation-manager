@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 const navItems = [
   { href: "/", label: "Dashboard" },
   { href: "/monitor", label: "Monitor" },
+  { href: "/settings", label: "Settings" },
   { href: "/manual-input", label: "Manual Input" },
   { href: "/export", label: "Export" },
 ];

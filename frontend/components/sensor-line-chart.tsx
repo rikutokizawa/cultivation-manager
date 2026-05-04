@@ -11,25 +11,36 @@ import {
 } from "recharts";
 
 import { formatJapanChartLabel } from "@/lib/datetime";
+import { sensorKeyFromRecord } from "@/lib/sensors";
 import type { SensorRecord } from "@/types/api";
 
 type SensorLineChartProps = {
   records: SensorRecord[];
   unit: string;
   color: string;
+  seriesNameByKey?: Record<string, string>;
 };
 
 export function SensorLineChart({
   records,
   unit,
   color,
+  seriesNameByKey = {},
 }: SensorLineChartProps) {
-  const chartData = [...records]
-    .reverse()
-    .map((record) => ({
+  const seriesKeys = Array.from(new Set(records.map(sensorKeyFromRecord)));
+  const colors = [color, "#9fd8cb", "#f8c471", "#d7b7ff", "#f4a7a1", "#a7d8ff"];
+  const rows = new Map<string, Record<string, string | number>>();
+
+  for (const record of [...records].reverse()) {
+    const row = rows.get(record.timestamp) ?? {
+      timestamp: record.timestamp,
       label: formatJapanChartLabel(record.timestamp),
-      value: Number(record.value.toFixed(2)),
-    }));
+    };
+    row[sensorKeyFromRecord(record)] = Number(record.value.toFixed(2));
+    rows.set(record.timestamp, row);
+  }
+
+  const chartData = Array.from(rows.values());
 
   return (
     <div className="h-[280px] w-full">
@@ -58,14 +69,19 @@ export function SensorLineChart({
               color: "#ffffff",
             }}
           />
-          <Line
-            type="monotone"
-            dataKey="value"
-            stroke={color}
-            strokeWidth={3}
-            dot={false}
-            activeDot={{ r: 5, fill: color }}
-          />
+          {seriesKeys.map((seriesKey, index) => (
+            <Line
+              key={seriesKey}
+              type="monotone"
+              dataKey={seriesKey}
+              name={seriesNameByKey[seriesKey] ?? `sensor ${index + 1}`}
+              stroke={colors[index % colors.length]}
+              strokeWidth={3}
+              dot={false}
+              connectNulls
+              activeDot={{ r: 5, fill: colors[index % colors.length] }}
+            />
+          ))}
         </LineChart>
       </ResponsiveContainer>
     </div>

@@ -14,6 +14,7 @@
 - CSV エクスポート API
 - 画像アップロード API
 - dashboard summary API
+- センサー表示設定 API
 
 ## 初期設定
 
@@ -170,8 +171,10 @@ kill <PID>
 - API ドキュメント: `http://localhost:8000/docs`
 - Health Check: `http://localhost:8000/health`
 - 最新状態 API: `http://localhost:8000/latest-status`
+- センサー表示設定 API: `http://localhost:8000/sensor-settings`
 - dashboard summary API: `http://localhost:8000/dashboard/summary`
 - Frontend Dashboard: `http://localhost:3000`
+- Frontend Settings: `http://localhost:3000/settings`
 - Frontend Manual Input: `http://localhost:3000/manual-input`
 - Frontend Export: `http://localhost:3000/export`
 
@@ -181,6 +184,7 @@ kill <PID>
 curl http://127.0.0.1:8000/health
 curl 'http://127.0.0.1:8000/sensor-records?limit=3'
 curl http://127.0.0.1:8000/latest-status
+curl http://127.0.0.1:8000/sensor-settings
 curl http://127.0.0.1:8000/dashboard/summary
 curl -X POST http://127.0.0.1:8000/upload-image \
   -F camera_id=camera-upload-01 \

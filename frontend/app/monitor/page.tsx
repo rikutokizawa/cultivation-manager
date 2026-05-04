@@ -1,24 +1,27 @@
 import { MonitorBoard } from "@/components/monitor-board";
-import { getSensorSeries } from "@/lib/api";
-import { type OndotoriMetricKey, ondotoriMetrics, ondotoriSource } from "@/lib/ondotori";
-import type { SensorRecord } from "@/types/api";
+import { getSensorLabels, getSensorSeries, getSensorSettings } from "@/lib/api";
+import { sensorTypesForSettings } from "@/lib/sensors";
 
 function startAtForInitialLoad() {
   return new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
 }
 
 export default async function MonitorPage() {
+  const [sensorSettings, sensorLabels] = await Promise.all([getSensorSettings(), getSensorLabels()]);
   const startAt = startAtForInitialLoad();
+  const sensorTypes = sensorTypesForSettings(sensorSettings);
   const entries = await Promise.all(
-    ondotoriMetrics.map(async (metric) => [
-      metric.key,
-      await getSensorSeries(metric.key, 2000, ondotoriSource, { startAt }),
+    sensorTypes.map(async (sensorType) => [
+      sensorType,
+      await getSensorSeries(sensorType, 2000, undefined, { startAt }),
     ] as const),
   );
 
   return (
     <MonitorBoard
-      initialRecords={Object.fromEntries(entries) as Record<OndotoriMetricKey, SensorRecord[]>}
+      initialSettings={sensorSettings}
+      initialLabels={sensorLabels}
+      initialRecords={Object.fromEntries(entries)}
     />
   );
 }

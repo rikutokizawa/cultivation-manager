@@ -1,5 +1,13 @@
 import { backendBaseUrl } from "@/lib/config";
-import type { LatestStatus, ManualRecord, SensorRecord } from "@/types/api";
+import type {
+  LatestStatus,
+  ManualRecord,
+  SensorLabel,
+  SensorLabelInput,
+  SensorRecord,
+  SensorSetting,
+  SensorSettingUpdate,
+} from "@/types/api";
 
 async function requestJson<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${backendBaseUrl}${path}`, {
@@ -30,6 +38,46 @@ export function getTemperatureSeries(limit = 48) {
   return requestJson<SensorRecord[]>(
     `/sensor-records?sensor_type=temperature&limit=${limit}`,
   );
+}
+
+export function getSensorSettings() {
+  return requestJson<SensorSetting[]>("/sensor-settings");
+}
+
+export function updateSensorSetting(sensorKey: string, payload: SensorSettingUpdate) {
+  return requestJson<SensorSetting>(`/sensor-settings/${encodeURIComponent(sensorKey)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getSensorLabels() {
+  return requestJson<SensorLabel[]>("/sensor-labels");
+}
+
+export function createSensorLabel(payload: SensorLabelInput) {
+  return requestJson<SensorLabel>("/sensor-labels", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateSensorLabel(labelId: number, payload: SensorLabelInput) {
+  return requestJson<SensorLabel>(`/sensor-labels/${labelId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteSensorLabel(labelId: number) {
+  const response = await fetch(`${backendBaseUrl}/sensor-labels/${labelId}`, {
+    method: "DELETE",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+  }
 }
 
 export function getSensorSeries(

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   CartesianGrid,
@@ -11,28 +12,32 @@ import {
   YAxis,
 } from "recharts";
 
-import { getSensorSeries } from "@/lib/api";
+import { getSensorLabels, getSensorSeries, getSensorSettings } from "@/lib/api";
 import { compareBackendTimestamps, formatJapanDateTime } from "@/lib/datetime";
 import {
-  type DeviceLabels,
-  type OndotoriMetricKey,
-  deviceKeyFromRecord,
+  alertBorderClass,
+  alertLevelForLabels,
+  alertTextClass,
   formatMetricValue,
   latestRecord,
-  normalizeStoredLabels,
-  ondotoriLabelStorageKey,
-  ondotoriMetrics,
-  ondotoriSource,
-} from "@/lib/ondotori";
-import type { SensorRecord } from "@/types/api";
+  metricConfigsForSettings,
+  sensorDisplayName,
+  sensorKeyFromRecord,
+  sensorTypesForSettings,
+  visibleSensorSettings,
+  type SensorMetricConfig,
+} from "@/lib/sensors";
+import type { SensorLabel, SensorRecord, SensorSetting } from "@/types/api";
 
 type MonitorBoardProps = {
-  initialRecords: Record<OndotoriMetricKey, SensorRecord[]>;
+  initialSettings: SensorSetting[];
+  initialLabels: SensorLabel[];
+  initialRecords: Record<string, SensorRecord[]>;
 };
 
 type LabeledArea = {
   label: string;
-  deviceKeys: string[];
+  sensorKeys: string[];
 };
 
 type ChartPeriodKey = "1h" | "6h" | "24h" | "7d";
@@ -44,58 +49,76 @@ const chartPeriods: Record<ChartPeriodKey, { label: string; hours: number; limit
   "24h": { label: "24h", hours: 24, limit: 2000 },
   "7d": { label: "7d", hours: 24 * 7, limit: 2000 },
 };
-const metricConfig = Object.fromEntries(
-  ondotoriMetrics.map((metric) => [metric.key, metric]),
-) as Record<OndotoriMetricKey, (typeof ondotoriMetrics)[number]>;
 
 function startAtForChart(period: ChartPeriodKey) {
   return new Date(Date.now() - chartPeriods[period].hours * 60 * 60 * 1000).toISOString();
 }
 
-async function fetchMonitorRecords(period: ChartPeriodKey) {
+async function fetchMonitorData(period: ChartPeriodKey) {
+  const [sensorSettings, sensorLabels] = await Promise.all([
+    getSensorSettings(),
+    getSensorLabels(),
+  ]);
   const startAt = startAtForChart(period);
   const entries = await Promise.all(
-    ondotoriMetrics.map(async (metric) => [
-      metric.key,
-      await getSensorSeries(metric.key, chartPeriods[period].limit, ondotoriSource, { startAt }),
+    sensorTypesForSettings(sensorSettings).map(async (sensorType) => [
+      sensorType,
+      await getSensorSeries(sensorType, chartPeriods[period].limit, undefined, { startAt }),
     ] as const),
   );
 
-  return Object.fromEntries(entries) as Record<OndotoriMetricKey, SensorRecord[]>;
+  return {
+    sensorSettings,
+    sensorLabels,
+    records: Object.fromEntries(entries) as Record<string, SensorRecord[]>,
+  };
 }
 
-function buildAreas(deviceLabels: DeviceLabels) {
+function buildAreas(settings: SensorSetting[]) {
+  const visibleSettings = visibleSensorSettings(settings);
   const areaMap = new Map<string, string[]>();
 
-  for (const [deviceKey, labels] of Object.entries(deviceLabels)) {
-    for (const label of labels) {
-      areaMap.set(label, [...(areaMap.get(label) ?? []), deviceKey]);
+  for (const setting of visibleSettings) {
+    for (const label of setting.labels) {
+      areaMap.set(label, [...(areaMap.get(label) ?? []), setting.sensor_key]);
     }
   }
 
-  return Array.from(areaMap.entries()).map(([label, deviceKeys]) => ({ label, deviceKeys }));
+  const labeledAreas = Array.from(areaMap.entries()).map(([label, sensorKeys]) => ({
+    label,
+    sensorKeys,
+  }));
+
+  if (labeledAreas.length > 0) {
+    return labeledAreas;
+  }
+
+  return visibleSettings.slice(0, 4).map((setting) => ({
+    label: sensorDisplayName(setting),
+    sensorKeys: [setting.sensor_key],
+  }));
 }
 
-function averageLatest(records: SensorRecord[], deviceKeys: string[]) {
-  const selected = new Set(deviceKeys);
-  const latestByDevice = new Map<string, SensorRecord>();
+function averageLatest(records: SensorRecord[], sensorKeys: string[]) {
+  const selected = new Set(sensorKeys);
+  const latestBySensor = new Map<string, SensorRecord>();
 
   for (const record of records) {
-    const key = deviceKeyFromRecord(record);
+    const key = sensorKeyFromRecord(record);
     if (!selected.has(key)) {
       continue;
     }
-    const current = latestByDevice.get(key);
+    const current = latestBySensor.get(key);
     if (
       !current ||
       compareBackendTimestamps(record.timestamp, current.timestamp) > 0 ||
       (record.timestamp === current.timestamp && record.id > current.id)
     ) {
-      latestByDevice.set(key, record);
+      latestBySensor.set(key, record);
     }
   }
 
-  const values = Array.from(latestByDevice.values());
+  const values = Array.from(latestBySensor.values());
   const latest = latestRecord(values);
   const average =
     values.length > 0 ? values.reduce((sum, record) => sum + record.value, 0) / values.length : undefined;
@@ -129,21 +152,21 @@ function seriesKeyForArea(area: LabeledArea) {
 function buildChartData(
   records: SensorRecord[],
   areas: LabeledArea[],
-  metric: OndotoriMetricKey,
+  metric: SensorMetricConfig,
 ) {
-  const areaDeviceSets = areas.map((area) => ({
+  const areaSensorSets = areas.map((area) => ({
     area,
-    deviceKeys: new Set(area.deviceKeys),
+    sensorKeys: new Set(area.sensorKeys),
     seriesKey: seriesKeyForArea(area),
   }));
   const buckets = new Map<number, Record<string, number[]>>();
 
   for (const record of records) {
-    const deviceKey = deviceKeyFromRecord(record);
+    const sensorKey = sensorKeyFromRecord(record);
     const timestampMs = parseBackendTimeMs(record.timestamp);
 
-    for (const area of areaDeviceSets) {
-      if (!area.deviceKeys.has(deviceKey)) {
+    for (const area of areaSensorSets) {
+      if (!area.sensorKeys.has(sensorKey)) {
         continue;
       }
 
@@ -164,7 +187,7 @@ function buildChartData(
       for (const [seriesKey, values] of Object.entries(areaValues)) {
         row[seriesKey] = Number(
           (values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(
-            metricConfig[metric].digits,
+            metric.digits,
           ),
         );
       }
@@ -173,36 +196,26 @@ function buildChartData(
     });
 }
 
-export function MonitorBoard({ initialRecords }: MonitorBoardProps) {
+export function MonitorBoard({ initialSettings, initialLabels, initialRecords }: MonitorBoardProps) {
+  const [sensorSettings, setSensorSettings] = useState(initialSettings);
+  const [sensorLabels, setSensorLabels] = useState(initialLabels);
   const [records, setRecords] = useState(initialRecords);
   const [chartPeriod, setChartPeriod] = useState<ChartPeriodKey>("6h");
-  const [deviceLabels, setDeviceLabels] = useState<DeviceLabels>({});
   const [lastSyncedAt, setLastSyncedAt] = useState(() => new Date());
   const [syncError, setSyncError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const storedLabels = window.localStorage.getItem(ondotoriLabelStorageKey);
-    if (!storedLabels) {
-      return;
-    }
-
-    try {
-      setDeviceLabels(normalizeStoredLabels(JSON.parse(storedLabels)));
-    } catch {
-      setDeviceLabels({});
-    }
-  }, []);
 
   useEffect(() => {
     let isMounted = true;
 
     async function refresh() {
       try {
-        const nextRecords = await fetchMonitorRecords(chartPeriod);
+        const nextData = await fetchMonitorData(chartPeriod);
         if (!isMounted) {
           return;
         }
-        setRecords(nextRecords);
+        setSensorSettings(nextData.sensorSettings);
+        setSensorLabels(nextData.sensorLabels);
+        setRecords(nextData.records);
         setLastSyncedAt(new Date());
         setSyncError(null);
       } catch (error) {
@@ -222,8 +235,13 @@ export function MonitorBoard({ initialRecords }: MonitorBoardProps) {
     };
   }, [chartPeriod]);
 
-  const areas = useMemo(() => buildAreas(deviceLabels), [deviceLabels]);
-  const displayAreas = areas.length > 0 ? areas.slice(0, 4) : [{ label: "未設定", deviceKeys: [] }];
+  const visibleSettings = useMemo(() => visibleSensorSettings(sensorSettings), [sensorSettings]);
+  const metricConfigs = useMemo(
+    () => metricConfigsForSettings(visibleSettings.length > 0 ? visibleSettings : sensorSettings),
+    [sensorSettings, visibleSettings],
+  );
+  const areas = useMemo(() => buildAreas(sensorSettings), [sensorSettings]);
+  const displayAreas = areas.length > 0 ? areas.slice(0, 4) : [];
   const hiddenAreaCount = Math.max(areas.length - displayAreas.length, 0);
 
   return (
@@ -258,97 +276,121 @@ export function MonitorBoard({ initialRecords }: MonitorBoardProps) {
               同期エラー
             </span>
           ) : null}
-          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">更新間隔 60秒</span>
+          <Link href="/settings" className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-white">
+            設定
+          </Link>
         </div>
       </section>
 
-      <section className="grid min-h-0 flex-1 gap-3" style={{ gridTemplateRows: `repeat(${ondotoriMetrics.length}, minmax(0, 1fr))` }}>
-        {ondotoriMetrics.map((metric) => (
-          <div key={metric.key} className="grid min-h-0 gap-3 xl:grid-cols-[0.68fr_1.32fr]">
-            <div className="dashboard-card grid min-h-0 grid-cols-2 gap-2 overflow-hidden rounded-[8px] p-3">
-              <div className="col-span-2 flex h-8 items-center justify-between border-b border-white/10 pb-2">
-                <h2 className="dashboard-section-title text-[18px]">{metric.label}</h2>
-                <div className="flex items-center gap-2 text-xs text-[#9cadbf]">
-                  {hiddenAreaCount > 0 ? <span>+{hiddenAreaCount} labels</span> : null}
-                  <span>{metric.unit}</span>
+      {visibleSettings.length === 0 ? (
+        <section className="dashboard-card rounded-[8px] p-5 text-sm text-[#9cadbf]">
+          表示対象のセンサーがありません。
+        </section>
+      ) : (
+        <section
+          className="grid min-h-0 flex-1 gap-3"
+          style={{ gridTemplateRows: `repeat(${metricConfigs.length}, minmax(0, 1fr))` }}
+        >
+          {metricConfigs.map((metric) => {
+            const metricRecords = (records[metric.key] ?? []).filter((record) =>
+              visibleSettings.some((setting) => setting.sensor_key === sensorKeyFromRecord(record)),
+            );
+            const unit = metric.unit || metricRecords[0]?.unit || "";
+
+            return (
+              <div key={metric.key} className="grid min-h-0 gap-3 xl:grid-cols-[0.68fr_1.32fr]">
+                <div className="dashboard-card grid min-h-0 grid-cols-2 gap-2 overflow-hidden rounded-[8px] p-3">
+                  <div className="col-span-2 flex h-8 items-center justify-between border-b border-white/10 pb-2">
+                    <h2 className="dashboard-section-title text-[18px]">{metric.label}</h2>
+                    <div className="flex items-center gap-2 text-xs text-[#9cadbf]">
+                      {hiddenAreaCount > 0 ? <span>+{hiddenAreaCount} labels</span> : null}
+                      <span>{unit}</span>
+                    </div>
+                  </div>
+                  {displayAreas.map((area) => {
+                    const average = averageLatest(metricRecords, area.sensorKeys);
+                    const level = alertLevelForLabels(
+                      sensorLabels,
+                      [area.label],
+                      metric.key,
+                      average.average,
+                    );
+
+                    return (
+                      <article key={area.label} className={`min-h-0 rounded-[8px] border p-2.5 ${alertBorderClass(level)}`}>
+                        <p className="truncate text-xs font-semibold text-[#9cadbf]">{area.label}</p>
+                        <p className={`mt-1 text-[24px] font-semibold leading-none ${alertTextClass(level)}`}>
+                          {formatMetricValue(average.average, average.unit ?? unit, metric.digits)}
+                        </p>
+                        <p className="mt-1 truncate text-[10px] text-[#9cadbf]">
+                          n={average.count} / {formatJapanDateTime(average.latestTimestamp, { seconds: true })}
+                        </p>
+                      </article>
+                    );
+                  })}
+                </div>
+
+                <div className="dashboard-card min-h-0 overflow-hidden rounded-[8px] p-2">
+                  <div className="h-full min-h-[120px]">
+                    <ResponsiveContainer>
+                      <LineChart
+                        data={buildChartData(metricRecords, displayAreas, metric)}
+                        margin={{ left: 0, right: 16, top: 10, bottom: 0 }}
+                      >
+                        <CartesianGrid stroke="rgba(84, 99, 113, 0.18)" strokeDasharray="4 4" />
+                        <XAxis
+                          dataKey="timestampMs"
+                          tick={{ fill: "#9cadbf", fontSize: 11 }}
+                          tickLine={false}
+                          axisLine={false}
+                          minTickGap={28}
+                          type="number"
+                          scale="time"
+                          domain={["dataMin", "dataMax"]}
+                          tickFormatter={(value) => formatTimeTick(Number(value))}
+                        />
+                        <YAxis
+                          tick={{ fill: "#9cadbf", fontSize: 11 }}
+                          tickLine={false}
+                          axisLine={false}
+                          domain={["dataMin - 1", "dataMax + 1"]}
+                          unit={unit}
+                        />
+                        <Tooltip
+                          labelFormatter={(value) => `${formatTimeTick(Number(value))} JST`}
+                          formatter={(value, name) => [
+                            `${Number(value).toFixed(metric.digits)} ${unit}`,
+                            name,
+                          ]}
+                          contentStyle={{
+                            borderRadius: 8,
+                            border: "1px solid rgba(84, 99, 113, 0.4)",
+                            backgroundColor: "rgba(31, 33, 35, 0.98)",
+                            color: "#ffffff",
+                          }}
+                        />
+                        {displayAreas.map((area, index) => (
+                          <Line
+                            key={`${metric.key}-${area.label}`}
+                            type="linear"
+                            dataKey={seriesKeyForArea(area)}
+                            name={area.label}
+                            stroke={["#c8def5", "#f8c471", "#9fd8cb", "#d7b7ff", "#f4a7a1"][index % 5]}
+                            strokeWidth={2.4}
+                            dot={false}
+                            connectNulls
+                            activeDot={{ r: 4 }}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               </div>
-              {displayAreas.map((area) => {
-                const average = averageLatest(records[metric.key], area.deviceKeys);
-
-                return (
-                  <article key={area.label} className="min-h-0 rounded-[8px] border border-white/10 bg-white/[0.03] p-2.5">
-                    <p className="truncate text-xs font-semibold text-[#9cadbf]">{area.label}</p>
-                    <p className="mt-1 text-[24px] font-semibold leading-none text-white">
-                      {formatMetricValue(average.average, average.unit ?? metric.unit, metric.digits)}
-                    </p>
-                    <p className="mt-1 truncate text-[10px] text-[#9cadbf]">
-                      n={average.count} / {formatJapanDateTime(average.latestTimestamp, { seconds: true })}
-                    </p>
-                  </article>
-                );
-              })}
-            </div>
-
-            <div className="dashboard-card min-h-0 overflow-hidden rounded-[8px] p-2">
-              <div className="h-full min-h-[120px]">
-                <ResponsiveContainer>
-                  <LineChart
-                    data={buildChartData(records[metric.key], displayAreas, metric.key)}
-                    margin={{ left: 0, right: 16, top: 10, bottom: 0 }}
-                  >
-                    <CartesianGrid stroke="rgba(84, 99, 113, 0.18)" strokeDasharray="4 4" />
-                    <XAxis
-                      dataKey="timestampMs"
-                      tick={{ fill: "#9cadbf", fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                      minTickGap={28}
-                      type="number"
-                      scale="time"
-                      domain={["dataMin", "dataMax"]}
-                      tickFormatter={(value) => formatTimeTick(Number(value))}
-                    />
-                    <YAxis
-                      tick={{ fill: "#9cadbf", fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                      domain={["dataMin - 1", "dataMax + 1"]}
-                      unit={metric.unit}
-                    />
-                    <Tooltip
-                      labelFormatter={(value) => `${formatTimeTick(Number(value))} JST`}
-                      formatter={(value, name) => [
-                        `${Number(value).toFixed(metric.digits)} ${metric.unit}`,
-                        name,
-                      ]}
-                      contentStyle={{
-                        borderRadius: 8,
-                        border: "1px solid rgba(84, 99, 113, 0.4)",
-                        backgroundColor: "rgba(31, 33, 35, 0.98)",
-                        color: "#ffffff",
-                      }}
-                    />
-                    {displayAreas.map((area, index) => (
-                      <Line
-                        key={`${metric.key}-${area.label}`}
-                        type="linear"
-                        dataKey={seriesKeyForArea(area)}
-                        name={area.label}
-                        stroke={["#c8def5", "#f8c471", "#9fd8cb", "#d7b7ff", "#f4a7a1"][index % 5]}
-                        strokeWidth={2.4}
-                        dot={false}
-                        connectNulls
-                        activeDot={{ r: 4 }}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-        ))}
-      </section>
+            );
+          })}
+        </section>
+      )}
     </div>
   );
 }
