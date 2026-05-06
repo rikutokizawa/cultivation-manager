@@ -58,6 +58,19 @@ export type SensorLabelInput = {
   thresholds: SensorLabelThreshold[];
 };
 
+export type SensorChartSetting = {
+  id: number | null;
+  sensor_type: string;
+  y_axis_min: number | null;
+  y_axis_max: number | null;
+};
+
+export type SensorChartSettingInput = {
+  sensor_type: string;
+  y_axis_min: number | null;
+  y_axis_max: number | null;
+};
+
 export type ManualRecord = {
   id: number;
   timestamp: string;

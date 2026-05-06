@@ -12,7 +12,7 @@ import {
   YAxis,
 } from "recharts";
 
-import { getSensorLabels, getSensorSeries, getSensorSettings } from "@/lib/api";
+import { getSensorChartSettings, getSensorLabels, getSensorSeries, getSensorSettings } from "@/lib/api";
 import { compareBackendTimestamps, formatJapanDateTime } from "@/lib/datetime";
 import {
   alertBorderClass,
@@ -26,11 +26,12 @@ import {
   visibleSensorSettings,
   type SensorMetricConfig,
 } from "@/lib/sensors";
-import type { SensorLabel, SensorRecord, SensorSetting } from "@/types/api";
+import type { SensorChartSetting, SensorLabel, SensorRecord, SensorSetting } from "@/types/api";
 
 type MonitorBoardProps = {
   initialSettings: SensorSetting[];
   initialLabels: SensorLabel[];
+  initialChartSettings: SensorChartSetting[];
   initialRecords: Record<string, SensorRecord[]>;
 };
 
@@ -54,9 +55,10 @@ function startAtForChart(period: ChartPeriodKey) {
 }
 
 async function fetchMonitorData(period: ChartPeriodKey) {
-  const [sensorSettings, sensorLabels] = await Promise.all([
+  const [sensorSettings, sensorLabels, chartSettings] = await Promise.all([
     getSensorSettings(),
     getSensorLabels(),
+    getSensorChartSettings(),
   ]);
   const startAt = startAtForChart(period);
   const entries = await Promise.all(
@@ -69,6 +71,7 @@ async function fetchMonitorData(period: ChartPeriodKey) {
   return {
     sensorSettings,
     sensorLabels,
+    chartSettings,
     records: Object.fromEntries(entries) as Record<string, SensorRecord[]>,
   };
 }
@@ -193,9 +196,22 @@ function buildChartData(
     });
 }
 
-export function MonitorBoard({ initialSettings, initialLabels, initialRecords }: MonitorBoardProps) {
+function chartDomainForSetting(chartSetting: SensorChartSetting | undefined) {
+  return [
+    chartSetting?.y_axis_min ?? "dataMin - 1",
+    chartSetting?.y_axis_max ?? "dataMax + 1",
+  ] as [number | string, number | string];
+}
+
+export function MonitorBoard({
+  initialSettings,
+  initialLabels,
+  initialChartSettings,
+  initialRecords,
+}: MonitorBoardProps) {
   const [sensorSettings, setSensorSettings] = useState(initialSettings);
   const [sensorLabels, setSensorLabels] = useState(initialLabels);
+  const [chartSettings, setChartSettings] = useState(initialChartSettings);
   const [records, setRecords] = useState(initialRecords);
   const [chartPeriod, setChartPeriod] = useState<ChartPeriodKey>("6h");
   const [lastSyncedAt, setLastSyncedAt] = useState(() => new Date());
@@ -212,6 +228,7 @@ export function MonitorBoard({ initialSettings, initialLabels, initialRecords }:
         }
         setSensorSettings(nextData.sensorSettings);
         setSensorLabels(nextData.sensorLabels);
+        setChartSettings(nextData.chartSettings);
         setRecords(nextData.records);
         setLastSyncedAt(new Date());
         setSyncError(null);
@@ -238,6 +255,10 @@ export function MonitorBoard({ initialSettings, initialLabels, initialRecords }:
     [sensorSettings, visibleSettings],
   );
   const areas = useMemo(() => buildAreas(sensorSettings), [sensorSettings]);
+  const chartSettingsByType = useMemo(
+    () => new Map(chartSettings.map((setting) => [setting.sensor_type, setting])),
+    [chartSettings],
+  );
   const displayAreas = areas.length > 0 ? areas.slice(0, 4) : [];
   const hiddenAreaCount = Math.max(areas.length - displayAreas.length, 0);
 
@@ -294,13 +315,14 @@ export function MonitorBoard({ initialSettings, initialLabels, initialRecords }:
             );
             const unit = metric.unit || metricRecords[0]?.unit || "";
             const chartData = buildChartData(metricRecords, displayAreas, metric);
+            const yAxisDomain = chartDomainForSetting(chartSettingsByType.get(metric.key));
 
             return (
               <div key={metric.key} className="grid min-h-0 gap-3 xl:grid-cols-[0.68fr_1.32fr]">
-                <div className="dashboard-card grid min-h-0 grid-cols-2 gap-2 overflow-hidden rounded-[8px] p-3">
-                  <div className="col-span-2 flex h-8 items-center justify-between border-b border-white/10 pb-2">
-                    <h2 className="dashboard-section-title text-[18px]">{metric.label}</h2>
-                    <div className="flex items-center gap-2 text-xs text-[#9cadbf]">
+                <div className="dashboard-card grid min-h-0 grid-cols-2 grid-rows-[auto_repeat(2,minmax(0,1fr))] gap-2 overflow-hidden rounded-[8px] p-3">
+                  <div className="col-span-2 flex min-w-0 items-center justify-between border-b border-white/10 pb-2">
+                    <h2 className="dashboard-section-title min-w-0 truncate text-[18px]">{metric.label}</h2>
+                    <div className="flex shrink-0 items-center gap-2 text-xs text-[#9cadbf]">
                       {hiddenAreaCount > 0 ? <span>+{hiddenAreaCount} labels</span> : null}
                       <span>{unit}</span>
                     </div>
@@ -319,12 +341,18 @@ export function MonitorBoard({ initialSettings, initialLabels, initialRecords }:
                     );
 
                     return (
-                      <article key={area.label} className={`min-h-0 rounded-[8px] border p-2.5 ${alertBorderClass(level)}`}>
+                      <article
+                        key={area.label}
+                        className={`flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[8px] border px-2.5 py-2 ${alertBorderClass(level)}`}
+                      >
                         <p className="truncate text-xs font-semibold text-[#9cadbf]">{area.label}</p>
-                        <p className={`mt-1 text-[24px] font-semibold leading-none ${alertTextClass(level)}`}>
+                        <p
+                          className={`mt-1 min-w-0 truncate font-semibold leading-none ${alertTextClass(level)}`}
+                          style={{ fontSize: "clamp(1rem, 1.45vw, 1.5rem)" }}
+                        >
                           {formatMetricValue(average.average, average.unit ?? unit, metric.digits)}
                         </p>
-                        <p className="mt-1 truncate text-[10px] text-[#9cadbf]">
+                        <p className="mt-auto min-w-0 truncate pt-1 text-[10px] leading-tight text-[#9cadbf]">
                           n={average.count} / {formatJapanDateTime(average.latestTimestamp, { seconds: true })}
                         </p>
                       </article>
@@ -360,7 +388,7 @@ export function MonitorBoard({ initialSettings, initialLabels, initialRecords }:
                           tick={{ fill: "#9cadbf", fontSize: 11 }}
                           tickLine={false}
                           axisLine={false}
-                          domain={["dataMin - 1", "dataMax + 1"]}
+                          domain={yAxisDomain}
                           unit={unit}
                         />
                         <Tooltip

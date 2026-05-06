@@ -1,8 +1,18 @@
 import { SensorSettingsPanel } from "@/components/sensor-settings-panel";
-import { getSensorLabels, getSensorSettings } from "@/lib/api";
+import { getSensorChartSettings, getSensorLabels, getSensorSettings } from "@/lib/api";
 
 export default async function SettingsPage() {
-  const [settings, labels] = await Promise.all([getSensorSettings(), getSensorLabels()]);
+  const [settings, labels, chartSettings] = await Promise.all([
+    getSensorSettings(),
+    getSensorLabels(),
+    getSensorChartSettings(),
+  ]);
 
-  return <SensorSettingsPanel initialSettings={settings} initialLabels={labels} />;
+  return (
+    <SensorSettingsPanel
+      initialSettings={settings}
+      initialLabels={labels}
+      initialChartSettings={chartSettings}
+    />
+  );
 }

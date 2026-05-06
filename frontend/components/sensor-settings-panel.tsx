@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import {
   createSensorLabel,
   deleteSensorLabel,
+  updateSensorChartSetting,
   updateSensorLabel,
   updateSensorSetting,
 } from "@/lib/api";
@@ -16,6 +17,8 @@ import {
   sensorDisplayName,
 } from "@/lib/sensors";
 import type {
+  SensorChartSetting,
+  SensorChartSettingInput,
   SensorLabel,
   SensorLabelInput,
   SensorLabelThreshold,
@@ -26,9 +29,11 @@ import type {
 type SensorSettingsPanelProps = {
   initialSettings: SensorSetting[];
   initialLabels: SensorLabel[];
+  initialChartSettings: SensorChartSetting[];
 };
 
 type DraftSensorSetting = SensorSetting;
+type DraftSensorChartSetting = SensorChartSetting;
 type DraftSensorLabel = SensorLabel & {
   isNew?: boolean;
 };
@@ -73,6 +78,14 @@ function labelToPayload(label: DraftSensorLabel): SensorLabelInput {
   };
 }
 
+function chartSettingToPayload(setting: DraftSensorChartSetting): SensorChartSettingInput {
+  return {
+    sensor_type: setting.sensor_type,
+    y_axis_min: setting.y_axis_min,
+    y_axis_max: setting.y_axis_max,
+  };
+}
+
 function numberOrNull(value: string) {
   return value === "" ? null : Number(value);
 }
@@ -84,14 +97,19 @@ function thresholdValue(value: number | null) {
 export function SensorSettingsPanel({
   initialSettings,
   initialLabels,
+  initialChartSettings,
 }: SensorSettingsPanelProps) {
   const [settings, setSettings] = useState<DraftSensorSetting[]>(() =>
     [...initialSettings].sort(compareSensorSettings),
   );
+  const [chartSettings, setChartSettings] = useState<DraftSensorChartSetting[]>(() => [
+    ...initialChartSettings,
+  ]);
   const [labels, setLabels] = useState<DraftSensorLabel[]>(() =>
     [...initialLabels].sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name, "ja")),
   );
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [savingChartType, setSavingChartType] = useState<string | null>(null);
   const [savingLabelId, setSavingLabelId] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -101,8 +119,18 @@ export function SensorSettingsPanel({
     [settings],
   );
   const sensorTypes = useMemo(
-    () => Array.from(new Set(settings.map((setting) => setting.sensor_type))).sort(),
-    [settings],
+    () =>
+      Array.from(
+        new Set([
+          ...settings.map((setting) => setting.sensor_type),
+          ...chartSettings.map((setting) => setting.sensor_type),
+        ]),
+      ).sort(),
+    [chartSettings, settings],
+  );
+  const chartSettingsByType = useMemo(
+    () => new Map(chartSettings.map((setting) => [setting.sensor_type, setting])),
+    [chartSettings],
   );
   const labelNames = useMemo(() => labels.map((label) => label.name).filter(Boolean), [labels]);
 
@@ -118,6 +146,27 @@ export function SensorSettingsPanel({
     setLabels((current) =>
       current.map((label) => (label.id === labelId ? { ...label, ...patch } : label)),
     );
+  }
+
+  function updateChartDraft(sensorType: string, patch: Partial<DraftSensorChartSetting>) {
+    setChartSettings((current) => {
+      const existing = current.find((setting) => setting.sensor_type === sensorType);
+      if (!existing) {
+        return [
+          ...current,
+          {
+            id: null,
+            sensor_type: sensorType,
+            y_axis_min: null,
+            y_axis_max: null,
+            ...patch,
+          },
+        ];
+      }
+      return current.map((setting) =>
+        setting.sensor_type === sensorType ? { ...setting, ...patch } : setting,
+      );
+    });
   }
 
   function updateThreshold(
@@ -192,6 +241,41 @@ export function SensorSettingsPanel({
       setError(saveError instanceof Error ? saveError.message : "保存に失敗しました");
     } finally {
       setSavingKey(null);
+    }
+  }
+
+  async function saveChartSetting(sensorType: string) {
+    const draft =
+      chartSettingsByType.get(sensorType) ??
+      ({
+        id: null,
+        sensor_type: sensorType,
+        y_axis_min: null,
+        y_axis_max: null,
+      } satisfies DraftSensorChartSetting);
+
+    if (draft.y_axis_min !== null && draft.y_axis_max !== null && draft.y_axis_min >= draft.y_axis_max) {
+      setError("グラフ下限は上限より小さくしてください");
+      return;
+    }
+
+    setSavingChartType(sensorType);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const saved = await updateSensorChartSetting(sensorType, chartSettingToPayload(draft));
+      setChartSettings((current) => {
+        const next = current.some((setting) => setting.sensor_type === sensorType)
+          ? current.map((setting) => (setting.sensor_type === sensorType ? saved : setting))
+          : [...current, saved];
+        return next.sort((a, b) => a.sensor_type.localeCompare(b.sensor_type, "ja"));
+      });
+      setMessage(`${metricConfigForType(sensorType, settings).label} のグラフ範囲を保存しました`);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "グラフ範囲の保存に失敗しました");
+    } finally {
+      setSavingChartType(null);
     }
   }
 
@@ -277,6 +361,80 @@ export function SensorSettingsPanel({
               {savingKey === "__all__" ? "保存中..." : "センサーをすべて保存"}
             </button>
           </div>
+        </div>
+      </section>
+
+      <section className="dashboard-card rounded-[8px] p-4">
+        <div className="mb-4 border-b border-white/10 pb-4">
+          <h2 className="dashboard-section-title text-[20px]">グラフ範囲</h2>
+          <p className="mt-1 text-sm text-[#9cadbf]">
+            モニター画面のグラフY軸の下限・上限を項目ごとに固定します。空欄の場合は自動調整です。
+          </p>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {sensorTypes.map((sensorType) => {
+            const chartSetting =
+              chartSettingsByType.get(sensorType) ??
+              ({
+                id: null,
+                sensor_type: sensorType,
+                y_axis_min: null,
+                y_axis_max: null,
+              } satisfies DraftSensorChartSetting);
+            const metric = metricConfigForType(sensorType, settings);
+
+            return (
+              <article
+                key={sensorType}
+                className="grid gap-3 rounded-[8px] border border-white/10 bg-white/[0.03] p-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-white">{metric.label}</h3>
+                    <p className="mt-1 text-xs text-[#9cadbf]">{metric.unit || sensorType}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => saveChartSetting(sensorType)}
+                    disabled={savingChartType !== null}
+                    className="rounded-[8px] border border-white/10 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {savingChartType === sensorType ? "保存中..." : "保存"}
+                  </button>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-2 text-sm font-medium text-[#d7e1eb]">
+                    <span>下限</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={thresholdValue(chartSetting.y_axis_min)}
+                      onChange={(event) =>
+                        updateChartDraft(sensorType, { y_axis_min: numberOrNull(event.target.value) })
+                      }
+                      className="w-full rounded-[8px] border border-white/10 bg-[#1f2123] px-3 py-2 text-sm text-white outline-none placeholder:text-[#9cadbf]/60"
+                      placeholder="自動"
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium text-[#d7e1eb]">
+                    <span>上限</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={thresholdValue(chartSetting.y_axis_max)}
+                      onChange={(event) =>
+                        updateChartDraft(sensorType, { y_axis_max: numberOrNull(event.target.value) })
+                      }
+                      className="w-full rounded-[8px] border border-white/10 bg-[#1f2123] px-3 py-2 text-sm text-white outline-none placeholder:text-[#9cadbf]/60"
+                      placeholder="自動"
+                    />
+                  </label>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </section>
 

@@ -4,6 +4,8 @@ import type {
   ManualRecord,
   SensorLabel,
   SensorLabelInput,
+  SensorChartSetting,
+  SensorChartSettingInput,
   SensorRecord,
   SensorSetting,
   SensorSettingUpdate,
@@ -46,6 +48,17 @@ export function getSensorSettings() {
 
 export function updateSensorSetting(sensorKey: string, payload: SensorSettingUpdate) {
   return requestJson<SensorSetting>(`/sensor-settings/${encodeURIComponent(sensorKey)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getSensorChartSettings() {
+  return requestJson<SensorChartSetting[]>("/sensor-chart-settings");
+}
+
+export function updateSensorChartSetting(sensorType: string, payload: SensorChartSettingInput) {
+  return requestJson<SensorChartSetting>(`/sensor-chart-settings/${encodeURIComponent(sensorType)}`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });

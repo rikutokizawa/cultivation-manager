@@ -1,5 +1,5 @@
 import { MonitorBoard } from "@/components/monitor-board";
-import { getSensorLabels, getSensorSeries, getSensorSettings } from "@/lib/api";
+import { getSensorChartSettings, getSensorLabels, getSensorSeries, getSensorSettings } from "@/lib/api";
 import { sensorTypesForSettings } from "@/lib/sensors";
 
 function startAtForInitialLoad() {
@@ -7,7 +7,11 @@ function startAtForInitialLoad() {
 }
 
 export default async function MonitorPage() {
-  const [sensorSettings, sensorLabels] = await Promise.all([getSensorSettings(), getSensorLabels()]);
+  const [sensorSettings, sensorLabels, chartSettings] = await Promise.all([
+    getSensorSettings(),
+    getSensorLabels(),
+    getSensorChartSettings(),
+  ]);
   const startAt = startAtForInitialLoad();
   const sensorTypes = sensorTypesForSettings(sensorSettings);
   const entries = await Promise.all(
@@ -21,6 +25,7 @@ export default async function MonitorPage() {
     <MonitorBoard
       initialSettings={sensorSettings}
       initialLabels={sensorLabels}
+      initialChartSettings={chartSettings}
       initialRecords={Object.fromEntries(entries)}
     />
   );
