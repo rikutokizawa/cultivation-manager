@@ -19,6 +19,7 @@ import {
   alertLevelForLabels,
   alertTextClass,
   formatMetricValue,
+  labelsForSetting,
   metricConfigsForSettings,
   sensorDisplayName,
   sensorKeyFromRecord,
@@ -41,6 +42,7 @@ type LabeledArea = {
 };
 
 type ChartPeriodKey = "1h" | "6h" | "24h" | "7d";
+type MonitorMode = "mode1" | "mode2";
 
 const refreshIntervalMs = 60_000;
 const chartPeriods: Record<ChartPeriodKey, { label: string; hours: number; limit: number }> = {
@@ -203,6 +205,52 @@ function chartDomainForSetting(chartSetting: SensorChartSetting | undefined) {
   ] as [number | string, number | string];
 }
 
+function buildLabelAverages(
+  settings: SensorSetting[],
+  sensorLabels: SensorLabel[],
+  metricConfigs: SensorMetricConfig[],
+) {
+  const groupedSettings = new Map<string, SensorSetting[]>();
+  const metricsByType = new Map(metricConfigs.map((metric) => [metric.key, metric]));
+
+  for (const setting of settings) {
+    for (const label of labelsForSetting(setting)) {
+      groupedSettings.set(label, [...(groupedSettings.get(label) ?? []), setting]);
+    }
+  }
+
+  return Array.from(groupedSettings.entries()).map(([label, labelSettings]) => {
+    const sensorTypes = metricConfigs.map((metric) => metric.key);
+    const metrics = sensorTypes.map((sensorType) => {
+      const average = averageLatestFromSettings(
+        settings,
+        labelSettings.map((setting) => setting.sensor_key),
+        sensorType,
+      );
+      const metric = metricsByType.get(sensorType);
+      const level = alertLevelForLabels(
+        sensorLabels,
+        [label],
+        sensorType,
+        average.average,
+      );
+
+      return {
+        sensorType,
+        label: metric?.label ?? sensorType,
+        level,
+        average: average.average,
+        unit: average.unit ?? metric?.unit,
+        digits: metric?.digits,
+        count: average.count,
+        latestTimestamp: average.latestTimestamp,
+      };
+    });
+
+    return { label, settings: labelSettings, metrics };
+  });
+}
+
 export function MonitorBoard({
   initialSettings,
   initialLabels,
@@ -213,6 +261,7 @@ export function MonitorBoard({
   const [sensorLabels, setSensorLabels] = useState(initialLabels);
   const [chartSettings, setChartSettings] = useState(initialChartSettings);
   const [records, setRecords] = useState(initialRecords);
+  const [monitorMode, setMonitorMode] = useState<MonitorMode>("mode1");
   const [chartPeriod, setChartPeriod] = useState<ChartPeriodKey>("6h");
   const [lastSyncedAt, setLastSyncedAt] = useState(() => new Date());
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -261,6 +310,10 @@ export function MonitorBoard({
   );
   const displayAreas = areas.length > 0 ? areas.slice(0, 4) : [];
   const hiddenAreaCount = Math.max(areas.length - displayAreas.length, 0);
+  const labelAverages = useMemo(
+    () => buildLabelAverages(visibleSettings, sensorLabels, metricConfigs),
+    [metricConfigs, sensorLabels, visibleSettings],
+  );
 
   return (
     <div className="flex h-[calc(100vh-7.5rem)] min-h-[620px] flex-col gap-3 overflow-hidden">
@@ -268,24 +321,42 @@ export function MonitorBoard({
         <div>
           <h1 className="dashboard-section-title text-[24px]">常時モニター</h1>
           <p className="mt-1 text-sm text-[#9cadbf]">
-            ラベル別平均値と直近{chartPeriods[chartPeriod].label}の推移
+            {monitorMode === "mode1"
+              ? `ラベル別平均値と直近${chartPeriods[chartPeriod].label}の推移`
+              : "ラベル別 最新平均"}
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-2 text-xs text-[#9cadbf]">
           <div className="flex rounded-full border border-white/10 bg-white/5 p-0.5">
-            {(Object.keys(chartPeriods) as ChartPeriodKey[]).map((period) => (
+            {(["mode1", "mode2"] as MonitorMode[]).map((mode) => (
               <button
-                key={period}
+                key={mode}
                 type="button"
-                onClick={() => setChartPeriod(period)}
+                onClick={() => setMonitorMode(mode)}
                 className={`rounded-full px-3 py-1 font-medium transition ${
-                  chartPeriod === period ? "bg-white/15 text-white" : "text-[#9cadbf] hover:text-white"
+                  monitorMode === mode ? "bg-white/15 text-white" : "text-[#9cadbf] hover:text-white"
                 }`}
               >
-                {chartPeriods[period].label}
+                {mode === "mode1" ? "モニター1" : "モニター2"}
               </button>
             ))}
           </div>
+          {monitorMode === "mode1" ? (
+            <div className="flex rounded-full border border-white/10 bg-white/5 p-0.5">
+              {(Object.keys(chartPeriods) as ChartPeriodKey[]).map((period) => (
+                <button
+                  key={period}
+                  type="button"
+                  onClick={() => setChartPeriod(period)}
+                  className={`rounded-full px-3 py-1 font-medium transition ${
+                    chartPeriod === period ? "bg-white/15 text-white" : "text-[#9cadbf] hover:text-white"
+                  }`}
+                >
+                  {chartPeriods[period].label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
             最終同期 {formatJapanDateTime(lastSyncedAt.toISOString(), { seconds: true })}
           </span>
@@ -305,11 +376,13 @@ export function MonitorBoard({
           表示対象のセンサーがありません。
         </section>
       ) : (
-        <section
-          className="grid min-h-0 flex-1 gap-3"
-          style={{ gridTemplateRows: `repeat(${metricConfigs.length}, minmax(0, 1fr))` }}
-        >
-          {metricConfigs.map((metric) => {
+        <>
+          {monitorMode === "mode1" ? (
+            <section
+              className="grid min-h-0 flex-1 gap-3"
+              style={{ gridTemplateRows: `repeat(${metricConfigs.length}, minmax(0, 1fr))` }}
+            >
+              {metricConfigs.map((metric) => {
             const metricRecords = (records[metric.key] ?? []).filter((record) =>
               visibleSettings.some((setting) => setting.sensor_key === sensorKeyFromRecord(record)),
             );
@@ -423,8 +496,50 @@ export function MonitorBoard({
                 </div>
               </div>
             );
-          })}
-        </section>
+              })}
+            </section>
+          ) : (
+            <section className="min-h-0 flex-1 overflow-y-auto">
+              {labelAverages.length > 0 ? (
+                <div className="grid gap-3 lg:grid-cols-3">
+                  {labelAverages.map((area) => (
+                    <article key={area.label} className="dashboard-card rounded-[8px] p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="truncate text-base font-semibold text-white">{area.label}</h3>
+                            <p className="mt-1 line-clamp-2 text-xs text-[#9cadbf]">
+                              {area.settings.map(sensorDisplayName).join(" / ")}
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-[#9cadbf]">
+                            {area.settings.length}センサー
+                          </span>
+                        </div>
+                        <div className="mt-3 grid gap-2">
+                          {area.metrics.map((metric) => (
+                            <div key={metric.sensorType} className="flex items-start justify-between gap-3 text-sm">
+                              <span className="text-[#9cadbf]">{metric.label}</span>
+                              <span className={`text-right font-semibold ${alertTextClass(metric.level)}`}>
+                                {formatMetricValue(metric.average, metric.unit, metric.digits)}
+                                <span className="ml-2 text-xs font-normal text-[#9cadbf]">n={metric.count}</span>
+                                <span className="block text-[11px] font-normal text-[#9cadbf]">
+                                  {formatJapanDateTime(metric.latestTimestamp, { seconds: true })}
+                                </span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="dashboard-card rounded-[8px] p-5 text-sm text-[#9cadbf]">
+                  ラベルが設定された表示中センサーはまだありません。
+                </div>
+              )}
+            </section>
+          )}
+        </>
       )}
     </div>
   );
