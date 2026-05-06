@@ -7,6 +7,7 @@ from backend.app.db.base import Base
 from backend.app.db.session import SessionLocal, engine
 from backend.app.services.camera_sources import build_camera_source
 from backend.app.services.collection_pipeline import persist_captured_images, persist_sensor_readings
+from backend.app.services.runtime_logging import configure_runtime_logging
 from backend.app.services.sensor_sources import build_sensor_source
 
 
@@ -29,13 +30,12 @@ def main() -> None:
     settings.ensure_directories()
     Base.metadata.create_all(bind=engine)
 
-    logging.basicConfig(
-        level=getattr(logging, settings.runtime_log_level.upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
+    configure_runtime_logging(settings)
 
     sensor_source = build_sensor_source(settings=settings, source_type=args.sensor_source)
     camera_source = build_camera_source(settings=settings, source_type=args.camera_source)
+    selected_sensor_source = args.sensor_source or settings.sensor_source_type
+    uses_ondotori = "ondotori" in {item.strip().lower() for item in selected_sensor_source.split(",")}
     sensor_interval = args.sensor_interval or settings.sensor_poll_interval_seconds
     camera_interval = args.camera_interval or settings.image_capture_interval_seconds
 
@@ -50,6 +50,9 @@ def main() -> None:
             with SessionLocal() as db:
                 records = persist_sensor_readings(db, sensor_source.collect())
             logging.info("runtime stored %s sensor records", len(records))
+            logging.info("sensor detail log: %s", settings.resolved_sensor_record_log_path)
+            if uses_ondotori:
+                logging.info("ondotori api log: %s", settings.resolved_ondotori_api_log_path)
             next_sensor_run = now + sensor_interval
 
         if now >= next_camera_run:

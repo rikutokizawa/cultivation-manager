@@ -2,6 +2,7 @@ import json
 import math
 import shlex
 import subprocess
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
@@ -9,6 +10,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from backend.app.core.config import Settings
+from backend.app.services.runtime_logging import log_ondotori_current_response
 from backend.app.services.runtime_models import CollectedSensorReading
 
 
@@ -210,8 +212,12 @@ class OndotoriCurrentSensorSource:
             method="POST",
         )
 
+        requested_at = datetime.now(UTC)
+        started_at = time.perf_counter()
+        status_code: int | None = None
         try:
             with urlopen(request, timeout=self.settings.ondotori_timeout_seconds) as response:
+                status_code = getattr(response, "status", None)
                 body = response.read().decode("utf-8")
         except HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
@@ -219,12 +225,15 @@ class OndotoriCurrentSensorSource:
         except URLError as exc:
             raise RuntimeError(f"Ondotori API request failed: {exc.reason}") from exc
 
+        responded_at = datetime.now(UTC)
+        duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
         response_payload = json.loads(body)
         devices = response_payload.get("devices")
         if not isinstance(devices, list):
             raise ValueError("Ondotori API response must contain a devices list.")
 
         readings: list[CollectedSensorReading] = []
+        skipped_channel_count = 0
         for device in devices:
             if not isinstance(device, dict):
                 continue
@@ -247,14 +256,17 @@ class OndotoriCurrentSensorSource:
 
             for channel in channels:
                 if not isinstance(channel, dict):
+                    skipped_channel_count += 1
                     continue
 
                 raw_value = str(channel.get("value", "")).strip()
                 if not raw_value or raw_value.upper().startswith("E"):
+                    skipped_channel_count += 1
                     continue
                 try:
                     numeric_value = float(raw_value)
                 except ValueError:
+                    skipped_channel_count += 1
                     continue
 
                 readings.append(
@@ -269,6 +281,17 @@ class OndotoriCurrentSensorSource:
                         note=f"{device.get('model', '')} {device_name} channel={channel.get('name', channel.get('num'))}",
                     )
                 )
+
+        log_ondotori_current_response(
+            settings=self.settings,
+            requested_at=requested_at,
+            responded_at=responded_at,
+            duration_ms=duration_ms,
+            status_code=status_code,
+            response_payload=response_payload,
+            reading_count=len(readings),
+            skipped_channel_count=skipped_channel_count,
+        )
 
         return readings
 

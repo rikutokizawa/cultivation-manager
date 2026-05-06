@@ -19,7 +19,6 @@ import {
   alertLevelForLabels,
   alertTextClass,
   formatMetricValue,
-  latestRecord,
   metricConfigsForSettings,
   sensorDisplayName,
   sensorKeyFromRecord,
@@ -99,35 +98,33 @@ function buildAreas(settings: SensorSetting[]) {
   }));
 }
 
-function averageLatest(records: SensorRecord[], sensorKeys: string[]) {
+function averageLatestFromSettings(
+  settings: SensorSetting[],
+  sensorKeys: string[],
+  sensorType: string,
+) {
   const selected = new Set(sensorKeys);
-  const latestBySensor = new Map<string, SensorRecord>();
-
-  for (const record of records) {
-    const key = sensorKeyFromRecord(record);
-    if (!selected.has(key)) {
-      continue;
-    }
-    const current = latestBySensor.get(key);
-    if (
-      !current ||
-      compareBackendTimestamps(record.timestamp, current.timestamp) > 0 ||
-      (record.timestamp === current.timestamp && record.id > current.id)
-    ) {
-      latestBySensor.set(key, record);
-    }
-  }
-
-  const values = Array.from(latestBySensor.values());
-  const latest = latestRecord(values);
+  const values = settings.filter(
+    (setting) =>
+      selected.has(setting.sensor_key) &&
+      setting.sensor_type === sensorType &&
+      setting.latest_value !== null,
+  );
   const average =
-    values.length > 0 ? values.reduce((sum, record) => sum + record.value, 0) / values.length : undefined;
+    values.length > 0
+      ? values.reduce((sum, setting) => sum + Number(setting.latest_value), 0) / values.length
+      : undefined;
+  const latestTimestamp = values
+    .map((setting) => setting.latest_timestamp)
+    .filter((timestamp): timestamp is string => Boolean(timestamp))
+    .sort(compareBackendTimestamps)
+    .at(-1);
 
   return {
     average,
     count: values.length,
-    unit: values[0]?.unit,
-    latestTimestamp: latest?.timestamp,
+    unit: values[0]?.latest_unit ?? values[0]?.unit,
+    latestTimestamp,
   };
 }
 
@@ -296,6 +293,7 @@ export function MonitorBoard({ initialSettings, initialLabels, initialRecords }:
               visibleSettings.some((setting) => setting.sensor_key === sensorKeyFromRecord(record)),
             );
             const unit = metric.unit || metricRecords[0]?.unit || "";
+            const chartData = buildChartData(metricRecords, displayAreas, metric);
 
             return (
               <div key={metric.key} className="grid min-h-0 gap-3 xl:grid-cols-[0.68fr_1.32fr]">
@@ -308,7 +306,11 @@ export function MonitorBoard({ initialSettings, initialLabels, initialRecords }:
                     </div>
                   </div>
                   {displayAreas.map((area) => {
-                    const average = averageLatest(metricRecords, area.sensorKeys);
+                    const average = averageLatestFromSettings(
+                      visibleSettings,
+                      area.sensorKeys,
+                      metric.key,
+                    );
                     const level = alertLevelForLabels(
                       sensorLabels,
                       [area.label],
@@ -331,10 +333,15 @@ export function MonitorBoard({ initialSettings, initialLabels, initialRecords }:
                 </div>
 
                 <div className="dashboard-card min-h-0 overflow-hidden rounded-[8px] p-2">
-                  <div className="h-full min-h-[120px]">
+                  <div className="relative h-full min-h-[120px]">
+                    {chartData.length === 0 ? (
+                      <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-sm text-[#9cadbf]">
+                        この期間のデータはありません
+                      </div>
+                    ) : null}
                     <ResponsiveContainer>
                       <LineChart
-                        data={buildChartData(metricRecords, displayAreas, metric)}
+                        data={chartData}
                         margin={{ left: 0, right: 16, top: 10, bottom: 0 }}
                       >
                         <CartesianGrid stroke="rgba(84, 99, 113, 0.18)" strokeDasharray="4 4" />

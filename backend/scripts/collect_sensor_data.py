@@ -7,6 +7,7 @@ from backend.app.core.config import get_settings
 from backend.app.db.base import Base
 from backend.app.db.session import SessionLocal, engine
 from backend.app.services.collection_pipeline import persist_sensor_readings
+from backend.app.services.runtime_logging import configure_runtime_logging
 from backend.app.services.sensor_sources import build_sensor_source
 
 
@@ -29,16 +30,15 @@ def main() -> None:
     settings.ensure_directories()
     Base.metadata.create_all(bind=engine)
 
-    logging.basicConfig(
-        level=getattr(logging, settings.runtime_log_level.upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
+    configure_runtime_logging(settings)
 
     source = build_sensor_source(
         settings=settings,
         source_type=args.source,
         json_path=Path(args.json_path) if args.json_path else None,
     )
+    selected_source = args.source or settings.sensor_source_type
+    uses_ondotori = "ondotori" in {item.strip().lower() for item in selected_source.split(",")}
     interval = args.interval or settings.sensor_poll_interval_seconds
 
     iteration = 0
@@ -46,6 +46,9 @@ def main() -> None:
         with SessionLocal() as db:
             records = persist_sensor_readings(db, source.collect())
         logging.info("stored %s sensor records", len(records))
+        logging.info("sensor detail log: %s", settings.resolved_sensor_record_log_path)
+        if uses_ondotori:
+            logging.info("ondotori api log: %s", settings.resolved_ondotori_api_log_path)
 
         if not args.loop:
             break
