@@ -18,6 +18,7 @@ import {
   alertBorderClass,
   alertLevelForLabels,
   alertTextClass,
+  compareLabelNames,
   formatMetricValue,
   labelsForSetting,
   metricConfigsForSettings,
@@ -39,9 +40,10 @@ type MonitorBoardProps = {
 type LabeledArea = {
   label: string;
   sensorKeys: string[];
+  color: string;
 };
 
-type ChartPeriodKey = "1h" | "6h" | "24h" | "48h" | "7d";
+type ChartPeriodKey = "1h" | "6h" | "24h" | "48h" | "72h" | "7d";
 type MonitorMode = "mode1" | "mode2";
 
 const refreshIntervalMs = 60_000;
@@ -49,9 +51,11 @@ const chartPeriods: Record<ChartPeriodKey, { label: string; hours: number; limit
   "1h": { label: "1h", hours: 1, limit: 800 },
   "6h": { label: "6h", hours: 6, limit: 2000 },
   "24h": { label: "24h", hours: 24, limit: 2000 },
-  "48h": { label: "48h", hours: 48, limit: 2000 },
-  "7d": { label: "7d", hours: 24 * 7, limit: 2000 },
+  "48h": { label: "48h", hours: 48, limit: 4000 },
+  "72h": { label: "72h", hours: 72, limit: 5000 },
+  "7d": { label: "7d", hours: 24 * 7, limit: 12000 },
 };
+const chartLineColors = ["#c8def5", "#f8c471", "#9fd8cb", "#d7b7ff", "#f4a7a1"];
 
 function startAtForChart(period: ChartPeriodKey) {
   return new Date(Date.now() - chartPeriods[period].hours * 60 * 60 * 1000).toISOString();
@@ -82,9 +86,10 @@ async function fetchMonitorData(period: ChartPeriodKey) {
   };
 }
 
-function buildAreas(settings: SensorSetting[]) {
+function buildAreas(settings: SensorSetting[], sensorLabels: SensorLabel[]) {
   const visibleSettings = visibleSensorSettings(settings);
   const areaMap = new Map<string, string[]>();
+  const labelColors = new Map(sensorLabels.map((label) => [label.name, label.color]));
 
   for (const setting of visibleSettings) {
     for (const label of setting.labels) {
@@ -92,18 +97,22 @@ function buildAreas(settings: SensorSetting[]) {
     }
   }
 
-  const labeledAreas = Array.from(areaMap.entries()).map(([label, sensorKeys]) => ({
-    label,
-    sensorKeys,
-  }));
+  const labeledAreas = Array.from(areaMap.entries())
+    .sort(([a], [b]) => compareLabelNames(a, b, sensorLabels))
+    .map(([label, sensorKeys], index) => ({
+      label,
+      sensorKeys,
+      color: labelColors.get(label) ?? chartLineColors[index % chartLineColors.length],
+    }));
 
   if (labeledAreas.length > 0) {
     return labeledAreas;
   }
 
-  return visibleSettings.slice(0, 4).map((setting) => ({
+  return visibleSettings.slice(0, 4).map((setting, index) => ({
     label: sensorDisplayName(setting),
     sensorKeys: [setting.sensor_key],
+    color: chartLineColors[index % chartLineColors.length],
   }));
 }
 
@@ -223,36 +232,38 @@ function buildLabelAverages(
     }
   }
 
-  return Array.from(groupedSettings.entries()).map(([label, labelSettings]) => {
-    const sensorTypes = metricConfigs.map((metric) => metric.key);
-    const metrics = sensorTypes.map((sensorType) => {
-      const average = averageLatestFromSettings(
-        settings,
-        labelSettings.map((setting) => setting.sensor_key),
-        sensorType,
-      );
-      const metric = metricsByType.get(sensorType);
-      const level = alertLevelForLabels(
-        sensorLabels,
-        [label],
-        sensorType,
-        average.average,
-      );
+  return Array.from(groupedSettings.entries())
+    .sort(([a], [b]) => compareLabelNames(a, b, sensorLabels))
+    .map(([label, labelSettings]) => {
+      const sensorTypes = metricConfigs.map((metric) => metric.key);
+      const metrics = sensorTypes.map((sensorType) => {
+        const average = averageLatestFromSettings(
+          settings,
+          labelSettings.map((setting) => setting.sensor_key),
+          sensorType,
+        );
+        const metric = metricsByType.get(sensorType);
+        const level = alertLevelForLabels(
+          sensorLabels,
+          [label],
+          sensorType,
+          average.average,
+        );
 
-      return {
-        sensorType,
-        label: metric?.label ?? sensorType,
-        level,
-        average: average.average,
-        unit: average.unit ?? metric?.unit,
-        digits: metric?.digits,
-        count: average.count,
-        latestTimestamp: average.latestTimestamp,
-      };
+        return {
+          sensorType,
+          label: metric?.label ?? sensorType,
+          level,
+          average: average.average,
+          unit: average.unit ?? metric?.unit,
+          digits: metric?.digits,
+          count: average.count,
+          latestTimestamp: average.latestTimestamp,
+        };
+      });
+
+      return { label, settings: labelSettings, metrics };
     });
-
-    return { label, settings: labelSettings, metrics };
-  });
 }
 
 export function MonitorBoard({
@@ -266,7 +277,7 @@ export function MonitorBoard({
   const [chartSettings, setChartSettings] = useState(initialChartSettings);
   const [records, setRecords] = useState(initialRecords);
   const [monitorMode, setMonitorMode] = useState<MonitorMode>("mode1");
-  const [chartPeriod, setChartPeriod] = useState<ChartPeriodKey>("6h");
+  const [chartPeriod, setChartPeriod] = useState<ChartPeriodKey>("72h");
   const [lastSyncedAt, setLastSyncedAt] = useState(() => new Date());
   const [syncError, setSyncError] = useState<string | null>(null);
 
@@ -311,12 +322,13 @@ export function MonitorBoard({
       ),
     [chartSettings, sensorSettings, visibleSettings],
   );
-  const areas = useMemo(() => buildAreas(sensorSettings), [sensorSettings]);
+  const areas = useMemo(() => buildAreas(sensorSettings, sensorLabels), [sensorLabels, sensorSettings]);
   const chartSettingsByType = useMemo(
     () => new Map(chartSettings.map((setting) => [setting.sensor_type, setting])),
     [chartSettings],
   );
   const displayAreas = areas.length > 0 ? areas.slice(0, 4) : [];
+  const chartAreas = [...displayAreas].reverse();
   const hiddenAreaCount = Math.max(areas.length - displayAreas.length, 0);
   const labelAverages = useMemo(
     () => buildLabelAverages(visibleSettings, sensorLabels, metricConfigs),
@@ -363,6 +375,24 @@ export function MonitorBoard({
                   {chartPeriods[period].label}
                 </button>
               ))}
+            </div>
+          ) : null}
+          {monitorMode === "mode1" && displayAreas.length > 0 ? (
+            <div className="flex max-w-[28rem] flex-wrap items-center justify-end gap-x-2 gap-y-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
+              {displayAreas.map((area) => (
+                <span key={area.label} className="flex min-w-0 items-center gap-1.5">
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: area.color }}
+                  />
+                  <span className="max-w-[5.5rem] truncate text-[11px] leading-none text-[#d7e1eb]">
+                    {area.label}
+                  </span>
+                </span>
+              ))}
+              {hiddenAreaCount > 0 ? (
+                <span className="text-[11px] leading-none text-[#9cadbf]">+{hiddenAreaCount}</span>
+              ) : null}
             </div>
           ) : null}
           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
@@ -485,13 +515,13 @@ export function MonitorBoard({
                             color: "#ffffff",
                           }}
                         />
-                        {displayAreas.map((area, index) => (
+                        {chartAreas.map((area) => (
                           <Line
                             key={`${metric.key}-${area.label}`}
                             type="linear"
                             dataKey={seriesKeyForArea(area)}
                             name={area.label}
-                            stroke={["#c8def5", "#f8c471", "#9fd8cb", "#d7b7ff", "#f4a7a1"][index % 5]}
+                            stroke={area.color}
                             strokeWidth={2.4}
                             dot={false}
                             connectNulls

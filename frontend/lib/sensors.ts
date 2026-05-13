@@ -203,6 +203,14 @@ export function labelsForSetting(setting: SensorSetting) {
   return setting.labels.length > 0 ? setting.labels : [];
 }
 
+export function compareLabelNames(a: string, b: string, labels: SensorLabel[]) {
+  const labelOrder = new Map(labels.map((label) => [label.name, label.display_order]));
+  return (
+    (labelOrder.get(a) ?? 1000) - (labelOrder.get(b) ?? 1000) ||
+    a.localeCompare(b, "ja")
+  );
+}
+
 export function labelsByName(labels: SensorLabel[]) {
   return new Map(labels.map((label) => [label.name, label]));
 }

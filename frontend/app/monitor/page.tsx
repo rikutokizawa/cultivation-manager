@@ -3,7 +3,7 @@ import { getSensorChartSettings, getSensorLabels, getSensorSeries, getSensorSett
 import { sensorTypesForSettings } from "@/lib/sensors";
 
 function startAtForInitialLoad() {
-  return new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+  return new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
 }
 
 export default async function MonitorPage() {
@@ -17,16 +17,18 @@ export default async function MonitorPage() {
   const entries = await Promise.all(
     sensorTypes.map(async (sensorType) => [
       sensorType,
-      await getSensorSeries(sensorType, 2000, undefined, { startAt, perSensorLimit: true }),
+      await getSensorSeries(sensorType, 5000, undefined, { startAt, perSensorLimit: true }),
     ] as const),
   );
 
   return (
-    <MonitorBoard
-      initialSettings={sensorSettings}
-      initialLabels={sensorLabels}
-      initialChartSettings={chartSettings}
-      initialRecords={Object.fromEntries(entries)}
-    />
+    <div className="relative left-1/2 w-[calc(100vw-2rem)] -translate-x-1/2 sm:w-[calc(100vw-3rem)] lg:w-[calc(100vw-4rem)]">
+      <MonitorBoard
+        initialSettings={sensorSettings}
+        initialLabels={sensorLabels}
+        initialChartSettings={chartSettings}
+        initialRecords={Object.fromEntries(entries)}
+      />
+    </div>
   );
 }

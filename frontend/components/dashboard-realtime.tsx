@@ -20,6 +20,7 @@ import {
   alertBorderClass,
   alertLevelForLabels,
   alertTextClass,
+  compareLabelNames,
   compareSensorSettings,
   formatLabelPrefix,
   formatMetricValue,
@@ -182,37 +183,39 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
 
     const sensorTypes = Array.from(new Set(visibleSettings.map((setting) => setting.sensor_type)));
 
-    return Array.from(groupedSettings.entries()).map(([label, settings]) => {
-      const metrics: LabelMetric[] = sensorTypes.map((sensorType) => {
-        const readings = settings
-          .filter((setting) => setting.sensor_type === sensorType)
-          .map((setting) => readingForSetting(setting, latestBySensor))
-          .filter((reading) => reading.value !== null && reading.value !== undefined);
-        const average =
-          readings.length > 0
-            ? readings.reduce((sum, reading) => sum + Number(reading.value), 0) / readings.length
-            : undefined;
-        const metric = metricConfigForType(sensorType, visibleSettings);
-        const level = alertLevelForLabels(
-          data.sensorLabels,
-          [label],
-          sensorType,
-          average,
-        );
+    return Array.from(groupedSettings.entries())
+      .sort(([a], [b]) => compareLabelNames(a, b, data.sensorLabels))
+      .map(([label, settings]) => {
+        const metrics: LabelMetric[] = sensorTypes.map((sensorType) => {
+          const readings = settings
+            .filter((setting) => setting.sensor_type === sensorType)
+            .map((setting) => readingForSetting(setting, latestBySensor))
+            .filter((reading) => reading.value !== null && reading.value !== undefined);
+          const average =
+            readings.length > 0
+              ? readings.reduce((sum, reading) => sum + Number(reading.value), 0) / readings.length
+              : undefined;
+          const metric = metricConfigForType(sensorType, visibleSettings);
+          const level = alertLevelForLabels(
+            data.sensorLabels,
+            [label],
+            sensorType,
+            average,
+          );
 
-        return {
-          sensorType,
-          label: metric.label,
-          level,
-          average,
-          unit: readings[0]?.unit ?? metric.unit,
-          count: readings.length,
-          latestTimestamp: latestTimestamp(readings.map((reading) => reading.timestamp)),
-        };
+          return {
+            sensorType,
+            label: metric.label,
+            level,
+            average,
+            unit: readings[0]?.unit ?? metric.unit,
+            count: readings.length,
+            latestTimestamp: latestTimestamp(readings.map((reading) => reading.timestamp)),
+          };
+        });
+
+        return { label, settings, metrics };
       });
-
-      return { label, settings, metrics };
-    });
   }, [data.sensorLabels, latestBySensor, visibleSettings]);
 
   const recordsByVisibleType = useMemo(() => {

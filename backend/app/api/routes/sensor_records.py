@@ -17,7 +17,7 @@ def list_sensor_records(
     source: str | None = None,
     start_at: datetime | None = None,
     end_at: datetime | None = None,
-    limit: int = Query(default=200, ge=1, le=2000),
+    limit: int = Query(default=200, ge=1, le=12000),
     per_sensor_limit: bool = False,
     db: Session = Depends(get_db),
 ) -> list[SensorRecord]:
