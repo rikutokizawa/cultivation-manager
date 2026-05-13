@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   CartesianGrid,
+  Customized,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -47,6 +48,7 @@ type ChartPeriodKey = "1h" | "6h" | "24h" | "48h" | "72h" | "7d";
 type MonitorMode = "mode1" | "mode2";
 
 const refreshIntervalMs = 60_000;
+const missingDataGapMs = 10 * 60 * 1000;
 const chartPeriods: Record<ChartPeriodKey, { label: string; hours: number; limit: number }> = {
   "1h": { label: "1h", hours: 1, limit: 800 },
   "6h": { label: "6h", hours: 6, limit: 2000 },
@@ -216,6 +218,59 @@ function chartDomainForSetting(chartSetting: SensorChartSetting | undefined) {
     chartSetting?.y_axis_min ?? "dataMin - 1",
     chartSetting?.y_axis_max ?? "dataMax + 1",
   ] as [number | string, number | string];
+}
+
+function GapAwareLines({
+  areas,
+  data,
+  xAxisMap,
+  yAxisMap,
+}: {
+  areas: LabeledArea[];
+  data: Record<string, number | string>[];
+  xAxisMap?: Record<string, { scale?: (value: number) => number }>;
+  yAxisMap?: Record<string, { scale?: (value: number) => number }>;
+}) {
+  const xScale = xAxisMap?.[0]?.scale;
+  const yScale = yAxisMap?.[0]?.scale;
+  if (!xScale || !yScale) {
+    return null;
+  }
+
+  return (
+    <g className="monitor-gap-aware-lines">
+      {areas.flatMap((area) => {
+        const seriesKey = seriesKeyForArea(area);
+        const points = data
+          .map((row) => ({
+            timestampMs: Number(row.timestampMs),
+            value: row[seriesKey],
+          }))
+          .filter(
+            (point): point is { timestampMs: number; value: number } =>
+              Number.isFinite(point.timestampMs) && typeof point.value === "number",
+          );
+
+        return points.slice(1).map((point, index) => {
+          const previous = points[index];
+          const isMissingGap = point.timestampMs - previous.timestampMs >= missingDataGapMs;
+          return (
+            <line
+              key={`${seriesKey}-${previous.timestampMs}-${point.timestampMs}`}
+              x1={xScale(previous.timestampMs)}
+              y1={yScale(previous.value)}
+              x2={xScale(point.timestampMs)}
+              y2={yScale(point.value)}
+              stroke={isMissingGap ? "#7b8794" : area.color}
+              strokeWidth={isMissingGap ? 2 : 2.4}
+              strokeLinecap="round"
+              strokeOpacity={isMissingGap ? 0.86 : 1}
+            />
+          );
+        });
+      })}
+    </g>
+  );
 }
 
 function buildLabelAverages(
@@ -515,17 +570,18 @@ export function MonitorBoard({
                             color: "#ffffff",
                           }}
                         />
+                        <Customized component={<GapAwareLines areas={chartAreas} data={chartData} />} />
                         {chartAreas.map((area) => (
                           <Line
                             key={`${metric.key}-${area.label}`}
                             type="linear"
                             dataKey={seriesKeyForArea(area)}
                             name={area.label}
-                            stroke={area.color}
-                            strokeWidth={2.4}
+                            stroke="transparent"
+                            strokeWidth={8}
                             dot={false}
                             connectNulls
-                            activeDot={{ r: 4 }}
+                            activeDot={{ r: 4, fill: area.color, stroke: area.color }}
                           />
                         ))}
                       </LineChart>
