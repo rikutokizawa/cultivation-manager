@@ -44,6 +44,7 @@ def main() -> None:
     parsed_count = 0
     inserted_count = 0
     skipped_duplicate_count = 0
+    skipped_invalid_count = 0
     delete_after_success = not args.keep_files
 
     with SessionLocal() as db:
@@ -64,8 +65,9 @@ def main() -> None:
             parsed_count += result.parsed_count
             inserted_count += result.inserted_count
             skipped_duplicate_count += result.skipped_duplicate_count
+            skipped_invalid_count += result.skipped_invalid_count
             logging.info(
-                "imported %s devices=%s period=%s..%s parsed=%s inserted=%s skipped_duplicates=%s deleted=%s",
+                "imported %s devices=%s period=%s..%s parsed=%s inserted=%s skipped_duplicates=%s skipped_invalid=%s deleted=%s",
                 path.name,
                 "; ".join(result.devices) or "unknown",
                 _format_jst(result.started_at),
@@ -73,16 +75,18 @@ def main() -> None:
                 result.parsed_count,
                 result.inserted_count,
                 result.skipped_duplicate_count,
+                result.skipped_invalid_count,
                 result.deleted,
             )
 
     logging.info(
-        "TRZ import complete files=%s failed=%s parsed=%s inserted=%s skipped_duplicates=%s input_dir=%s",
+        "TRZ import complete files=%s failed=%s parsed=%s inserted=%s skipped_duplicates=%s skipped_invalid=%s input_dir=%s",
         imported_files,
         failed_files,
         parsed_count,
         inserted_count,
         skipped_duplicate_count,
+        skipped_invalid_count,
         input_dir,
     )
 

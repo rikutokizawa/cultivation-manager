@@ -21,8 +21,11 @@ class TrzChannelDefinition:
     unit: str
     scale: float
     offset: float = 0.0
+    invalid_raw_values: frozenset[int] = frozenset({-4095, -4370})
 
-    def convert(self, raw_value: int) -> float:
+    def convert(self, raw_value: int) -> float | None:
+        if raw_value in self.invalid_raw_values:
+            return None
         return round((raw_value + self.offset) * self.scale, 3)
 
 
@@ -32,6 +35,7 @@ class TrzImportResult:
     parsed_count: int
     inserted_count: int
     skipped_duplicate_count: int
+    skipped_invalid_count: int
     deleted: bool
     devices: tuple[str, ...]
     started_at: datetime | None
@@ -50,6 +54,11 @@ RTR_502_CHANNELS = {
 
 
 def parse_ondotori_trz(path: Path) -> list[CollectedSensorReading]:
+    readings, _ = _parse_ondotori_trz(path)
+    return readings
+
+
+def _parse_ondotori_trz(path: Path) -> tuple[list[CollectedSensorReading], int]:
     try:
         root = ET.parse(path).getroot()
     except ET.ParseError as exc:
@@ -62,6 +71,7 @@ def parse_ondotori_trz(path: Path) -> list[CollectedSensorReading]:
     base_name = _child_text(base, "name") or _child_text(base, "serial") or "ondotori-base"
 
     readings: list[CollectedSensorReading] = []
+    skipped_invalid_count = 0
     for channel in root.findall("ch"):
         model = _required_child_text(channel, "model", path)
         serial = _required_child_text(channel, "serial", path)
@@ -81,20 +91,24 @@ def parse_ondotori_trz(path: Path) -> list[CollectedSensorReading]:
 
         location = f"{base_name} / {name}"
         for index, raw_value in enumerate(raw_values):
+            value = definition.convert(raw_value)
+            if value is None:
+                skipped_invalid_count += 1
+                continue
             readings.append(
                 CollectedSensorReading(
                     timestamp=start + timedelta(seconds=interval_seconds * index),
                     sensor_type=definition.sensor_type,
                     sensor_id=f"{serial}-ch{channel_num}",
                     location=location,
-                    value=definition.convert(raw_value),
+                    value=value,
                     unit=definition.unit,
                     source="ondotori-trz",
                     note=f"{model} {name} channel={channel_num} imported from {path.name}",
                 )
             )
 
-    return readings
+    return readings, skipped_invalid_count
 
 
 def import_ondotori_trz_file(
@@ -104,7 +118,7 @@ def import_ondotori_trz_file(
     delete_after_success: bool = True,
     dry_run: bool = False,
 ) -> TrzImportResult:
-    readings = parse_ondotori_trz(path)
+    readings, skipped_invalid_count = _parse_ondotori_trz(path)
     deduped_readings, skipped_duplicate_count = _drop_duplicate_readings(db, readings)
     devices = _describe_devices(readings)
     started_at = min((reading.timestamp for reading in readings), default=None)
@@ -121,6 +135,7 @@ def import_ondotori_trz_file(
         parsed_count=len(readings),
         inserted_count=inserted_count,
         skipped_duplicate_count=skipped_duplicate_count,
+        skipped_invalid_count=skipped_invalid_count,
         deleted=delete_after_success and not dry_run,
         devices=devices,
         started_at=started_at,
