@@ -13,11 +13,11 @@ export default async function MonitorPage() {
     getSensorChartSettings(),
   ]);
   const startAt = startAtForInitialLoad();
-  const sensorTypes = sensorTypesForSettings(sensorSettings);
+  const sensorTypes = sensorTypesForSettings(sensorSettings, chartSettings);
   const entries = await Promise.all(
     sensorTypes.map(async (sensorType) => [
       sensorType,
-      await getSensorSeries(sensorType, 2000, undefined, { startAt }),
+      await getSensorSeries(sensorType, 2000, undefined, { startAt, perSensorLimit: true }),
     ] as const),
   );
 

@@ -1,14 +1,21 @@
 import { DashboardRealtime } from "@/components/dashboard-realtime";
-import { getLatestStatus, getSensorLabels, getSensorSeries, getSensorSettings } from "@/lib/api";
+import {
+  getLatestStatus,
+  getSensorChartSettings,
+  getSensorLabels,
+  getSensorSeries,
+  getSensorSettings,
+} from "@/lib/api";
 import { sensorTypesForSettings } from "@/lib/sensors";
 
 export default async function DashboardPage() {
-  const [latestStatus, sensorSettings, sensorLabels] = await Promise.all([
+  const [latestStatus, sensorSettings, sensorLabels, sensorChartSettings] = await Promise.all([
     getLatestStatus(),
     getSensorSettings(),
     getSensorLabels(),
+    getSensorChartSettings(),
   ]);
-  const sensorTypes = sensorTypesForSettings(sensorSettings);
+  const sensorTypes = sensorTypesForSettings(sensorSettings, sensorChartSettings);
   const recordEntries = await Promise.all(
     sensorTypes.map(async (sensorType) => [
       sensorType,
@@ -22,6 +29,7 @@ export default async function DashboardPage() {
         latestStatus,
         sensorSettings,
         sensorLabels,
+        sensorChartSettings,
         recordsByType: Object.fromEntries(recordEntries),
       }}
     />

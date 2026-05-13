@@ -63,12 +63,14 @@ export type SensorChartSetting = {
   sensor_type: string;
   y_axis_min: number | null;
   y_axis_max: number | null;
+  display_order: number;
 };
 
 export type SensorChartSettingInput = {
   sensor_type: string;
   y_axis_min: number | null;
   y_axis_max: number | null;
+  display_order: number;
 };
 
 export type ManualRecord = {

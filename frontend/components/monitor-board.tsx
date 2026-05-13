@@ -41,7 +41,7 @@ type LabeledArea = {
   sensorKeys: string[];
 };
 
-type ChartPeriodKey = "1h" | "6h" | "24h" | "7d";
+type ChartPeriodKey = "1h" | "6h" | "24h" | "48h" | "7d";
 type MonitorMode = "mode1" | "mode2";
 
 const refreshIntervalMs = 60_000;
@@ -49,6 +49,7 @@ const chartPeriods: Record<ChartPeriodKey, { label: string; hours: number; limit
   "1h": { label: "1h", hours: 1, limit: 800 },
   "6h": { label: "6h", hours: 6, limit: 2000 },
   "24h": { label: "24h", hours: 24, limit: 2000 },
+  "48h": { label: "48h", hours: 48, limit: 2000 },
   "7d": { label: "7d", hours: 24 * 7, limit: 2000 },
 };
 
@@ -64,7 +65,7 @@ async function fetchMonitorData(period: ChartPeriodKey) {
   ]);
   const startAt = startAtForChart(period);
   const entries = await Promise.all(
-    sensorTypesForSettings(sensorSettings).map(async (sensorType) => [
+    sensorTypesForSettings(sensorSettings, chartSettings).map(async (sensorType) => [
       sensorType,
       await getSensorSeries(sensorType, chartPeriods[period].limit, undefined, {
         startAt,
@@ -303,8 +304,12 @@ export function MonitorBoard({
 
   const visibleSettings = useMemo(() => visibleSensorSettings(sensorSettings), [sensorSettings]);
   const metricConfigs = useMemo(
-    () => metricConfigsForSettings(visibleSettings.length > 0 ? visibleSettings : sensorSettings),
-    [sensorSettings, visibleSettings],
+    () =>
+      metricConfigsForSettings(
+        visibleSettings.length > 0 ? visibleSettings : sensorSettings,
+        chartSettings,
+      ),
+    [chartSettings, sensorSettings, visibleSettings],
   );
   const areas = useMemo(() => buildAreas(sensorSettings), [sensorSettings]);
   const chartSettingsByType = useMemo(

@@ -1,5 +1,11 @@
 import { compareBackendTimestamps } from "@/lib/datetime";
-import type { SensorLabel, SensorLabelThreshold, SensorRecord, SensorSetting } from "@/types/api";
+import type {
+  SensorChartSetting,
+  SensorLabel,
+  SensorLabelThreshold,
+  SensorRecord,
+  SensorSetting,
+} from "@/types/api";
 
 export type SensorMetricConfig = {
   key: string;
@@ -10,6 +16,7 @@ export type SensorMetricConfig = {
 };
 
 export const fallbackSensorTypes = ["temperature", "humidity", "co2", "tank_level"];
+const fallbackSensorTypeOrder = new Map(fallbackSensorTypes.map((sensorType, index) => [sensorType, index]));
 
 const defaultMetricLabels: Record<string, string> = {
   temperature: "温度",
@@ -83,10 +90,26 @@ export function visibleSensorSettings(settings: SensorSetting[]) {
   return [...settings].filter((setting) => setting.is_visible).sort(compareSensorSettings);
 }
 
-export function sensorTypesForSettings(settings: SensorSetting[]) {
+export function compareSensorTypes(
+  a: string,
+  b: string,
+  chartSettings: SensorChartSetting[] = [],
+) {
+  const chartOrder = new Map(chartSettings.map((setting) => [setting.sensor_type, setting.display_order]));
+  return (
+    (chartOrder.get(a) ?? fallbackSensorTypeOrder.get(a) ?? 1000) -
+      (chartOrder.get(b) ?? fallbackSensorTypeOrder.get(b) ?? 1000) ||
+    a.localeCompare(b, "ja")
+  );
+}
+
+export function sensorTypesForSettings(
+  settings: SensorSetting[],
+  chartSettings: SensorChartSetting[] = [],
+) {
   const visibleTypes = Array.from(
     new Set(visibleSensorSettings(settings).map((setting) => setting.sensor_type)),
-  );
+  ).sort((a, b) => compareSensorTypes(a, b, chartSettings));
   if (visibleTypes.length > 0) {
     return visibleTypes;
   }
@@ -155,8 +178,11 @@ export function metricConfigForType(
   };
 }
 
-export function metricConfigsForSettings(settings: SensorSetting[]) {
-  return sensorTypesForSettings(settings).map((sensorType, index) =>
+export function metricConfigsForSettings(
+  settings: SensorSetting[],
+  chartSettings: SensorChartSetting[] = [],
+) {
+  return sensorTypesForSettings(settings, chartSettings).map((sensorType, index) =>
     metricConfigForType(sensorType, settings, index),
   );
 }

@@ -12,6 +12,7 @@ import {
 import { formatJapanDateTime } from "@/lib/datetime";
 import {
   compareSensorSettings,
+  compareSensorTypes,
   formatMetricValue,
   metricConfigForType,
   sensorDisplayName,
@@ -83,6 +84,7 @@ function chartSettingToPayload(setting: DraftSensorChartSetting): SensorChartSet
     sensor_type: setting.sensor_type,
     y_axis_min: setting.y_axis_min,
     y_axis_max: setting.y_axis_max,
+    display_order: Number(setting.display_order) || 0,
   };
 }
 
@@ -104,7 +106,7 @@ export function SensorSettingsPanel({
   );
   const [chartSettings, setChartSettings] = useState<DraftSensorChartSetting[]>(() => [
     ...initialChartSettings,
-  ]);
+  ].sort((a, b) => compareSensorTypes(a.sensor_type, b.sensor_type, initialChartSettings)));
   const [labels, setLabels] = useState<DraftSensorLabel[]>(() =>
     [...initialLabels].sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name, "ja")),
   );
@@ -125,7 +127,7 @@ export function SensorSettingsPanel({
           ...settings.map((setting) => setting.sensor_type),
           ...chartSettings.map((setting) => setting.sensor_type),
         ]),
-      ).sort(),
+      ).sort((a, b) => compareSensorTypes(a, b, chartSettings)),
     [chartSettings, settings],
   );
   const chartSettingsByType = useMemo(
@@ -159,6 +161,7 @@ export function SensorSettingsPanel({
             sensor_type: sensorType,
             y_axis_min: null,
             y_axis_max: null,
+            display_order: 0,
             ...patch,
           },
         ];
@@ -252,6 +255,7 @@ export function SensorSettingsPanel({
         sensor_type: sensorType,
         y_axis_min: null,
         y_axis_max: null,
+        display_order: chartSettings.length,
       } satisfies DraftSensorChartSetting);
 
     if (draft.y_axis_min !== null && draft.y_axis_max !== null && draft.y_axis_min >= draft.y_axis_max) {
@@ -269,9 +273,9 @@ export function SensorSettingsPanel({
         const next = current.some((setting) => setting.sensor_type === sensorType)
           ? current.map((setting) => (setting.sensor_type === sensorType ? saved : setting))
           : [...current, saved];
-        return next.sort((a, b) => a.sensor_type.localeCompare(b.sensor_type, "ja"));
+        return next.sort((a, b) => compareSensorTypes(a.sensor_type, b.sensor_type, next));
       });
-      setMessage(`${metricConfigForType(sensorType, settings).label} のグラフ範囲を保存しました`);
+      setMessage(`${metricConfigForType(sensorType, settings).label} のグラフ設定を保存しました`);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "グラフ範囲の保存に失敗しました");
     } finally {
@@ -368,12 +372,12 @@ export function SensorSettingsPanel({
         <div className="mb-4 border-b border-white/10 pb-4">
           <h2 className="dashboard-section-title text-[20px]">グラフ範囲</h2>
           <p className="mt-1 text-sm text-[#9cadbf]">
-            モニター画面のグラフY軸の下限・上限を項目ごとに固定します。空欄の場合は自動調整です。
+            モニター画面とダッシュボードの項目表示順、グラフY軸の下限・上限を設定します。範囲が空欄の場合は自動調整です。
           </p>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {sensorTypes.map((sensorType) => {
+          {sensorTypes.map((sensorType, index) => {
             const chartSetting =
               chartSettingsByType.get(sensorType) ??
               ({
@@ -381,6 +385,7 @@ export function SensorSettingsPanel({
                 sensor_type: sensorType,
                 y_axis_min: null,
                 y_axis_max: null,
+                display_order: index,
               } satisfies DraftSensorChartSetting);
             const metric = metricConfigForType(sensorType, settings);
 
@@ -404,7 +409,19 @@ export function SensorSettingsPanel({
                   </button>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-[0.7fr_1fr_1fr]">
+                  <label className="space-y-2 text-sm font-medium text-[#d7e1eb]">
+                    <span>表示順</span>
+                    <input
+                      type="number"
+                      step="1"
+                      value={chartSetting.display_order}
+                      onChange={(event) =>
+                        updateChartDraft(sensorType, { display_order: Number(event.target.value) })
+                      }
+                      className="w-full rounded-[8px] border border-white/10 bg-[#1f2123] px-3 py-2 text-sm text-white outline-none placeholder:text-[#9cadbf]/60"
+                    />
+                  </label>
                   <label className="space-y-2 text-sm font-medium text-[#d7e1eb]">
                     <span>下限</span>
                     <input

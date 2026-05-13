@@ -5,6 +5,7 @@ class SensorChartSettingUpdate(BaseModel):
     sensor_type: str
     y_axis_min: float | None = None
     y_axis_max: float | None = None
+    display_order: int = 0
 
     @field_validator("sensor_type")
     @classmethod
@@ -26,3 +27,4 @@ class SensorChartSettingRead(BaseModel):
     sensor_type: str
     y_axis_min: float | None = None
     y_axis_max: float | None = None
+    display_order: int = 0

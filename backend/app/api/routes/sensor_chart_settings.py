@@ -18,13 +18,17 @@ def chart_setting_to_read(setting: SensorChartSetting) -> SensorChartSettingRead
         sensor_type=setting.sensor_type,
         y_axis_min=setting.y_axis_min,
         y_axis_max=setting.y_axis_max,
+        display_order=setting.display_order,
     )
 
 
 @router.get("", response_model=list[SensorChartSettingRead])
 def list_sensor_chart_settings(db: Session = Depends(get_db)) -> list[SensorChartSettingRead]:
     settings = db.scalars(
-        select(SensorChartSetting).order_by(SensorChartSetting.sensor_type.asc())
+        select(SensorChartSetting).order_by(
+            SensorChartSetting.display_order.asc(),
+            SensorChartSetting.sensor_type.asc(),
+        )
     ).all()
     return [chart_setting_to_read(setting) for setting in settings]
 
@@ -52,6 +56,7 @@ def update_sensor_chart_setting(
     setting.sensor_type = normalized_sensor_type
     setting.y_axis_min = payload.y_axis_min
     setting.y_axis_max = payload.y_axis_max
+    setting.display_order = payload.display_order
 
     db.commit()
     db.refresh(setting)

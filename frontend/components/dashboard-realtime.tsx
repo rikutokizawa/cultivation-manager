@@ -7,7 +7,13 @@ import { LatestImages } from "@/components/latest-images";
 import { SectionCard } from "@/components/section-card";
 import { SensorLineChart } from "@/components/sensor-line-chart";
 import { StatusCard } from "@/components/status-card";
-import { getLatestStatus, getSensorLabels, getSensorSeries, getSensorSettings } from "@/lib/api";
+import {
+  getLatestStatus,
+  getSensorChartSettings,
+  getSensorLabels,
+  getSensorSeries,
+  getSensorSettings,
+} from "@/lib/api";
 import { compareBackendTimestamps, formatJapanDateTime } from "@/lib/datetime";
 import {
   type AlertLevel,
@@ -26,12 +32,13 @@ import {
   sensorTypesForSettings,
   visibleSensorSettings,
 } from "@/lib/sensors";
-import type { LatestStatus, SensorLabel, SensorRecord, SensorSetting } from "@/types/api";
+import type { LatestStatus, SensorChartSetting, SensorLabel, SensorRecord, SensorSetting } from "@/types/api";
 
 type DashboardData = {
   latestStatus: LatestStatus;
   sensorSettings: SensorSetting[];
   sensorLabels: SensorLabel[];
+  sensorChartSettings: SensorChartSetting[];
   recordsByType: Record<string, SensorRecord[]>;
 };
 
@@ -53,12 +60,13 @@ const refreshIntervalMs = 60_000;
 const accentCycle = ["green", "blue", "amber", "slate"] as const;
 
 async function fetchDashboardData(): Promise<DashboardData> {
-  const [latestStatus, sensorSettings, sensorLabels] = await Promise.all([
+  const [latestStatus, sensorSettings, sensorLabels, sensorChartSettings] = await Promise.all([
     getLatestStatus(),
     getSensorSettings(),
     getSensorLabels(),
+    getSensorChartSettings(),
   ]);
-  const sensorTypes = sensorTypesForSettings(sensorSettings);
+  const sensorTypes = sensorTypesForSettings(sensorSettings, sensorChartSettings);
   const recordEntries = await Promise.all(
     sensorTypes.map(async (sensorType) => [
       sensorType,
@@ -70,6 +78,7 @@ async function fetchDashboardData(): Promise<DashboardData> {
     latestStatus,
     sensorSettings,
     sensorLabels,
+    sensorChartSettings,
     recordsByType: Object.fromEntries(recordEntries),
   };
 }
@@ -149,8 +158,11 @@ export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
     [data.recordsByType],
   );
   const metricConfigs = useMemo(
-    () => (visibleSettings.length > 0 ? metricConfigsForSettings(visibleSettings) : []),
-    [visibleSettings],
+    () =>
+      visibleSettings.length > 0
+        ? metricConfigsForSettings(visibleSettings, data.sensorChartSettings)
+        : [],
+    [data.sensorChartSettings, visibleSettings],
   );
   const seriesNameByKey = useMemo(() => buildSeriesNameByKey(data.sensorSettings), [data.sensorSettings]);
 
