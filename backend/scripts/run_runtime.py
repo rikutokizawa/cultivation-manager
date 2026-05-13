@@ -47,13 +47,17 @@ def main() -> None:
         now = time.monotonic()
 
         if now >= next_sensor_run:
-            with SessionLocal() as db:
-                records = persist_sensor_readings(db, sensor_source.collect())
-            logging.info("runtime stored %s sensor records", len(records))
-            logging.info("sensor detail log: %s", settings.resolved_sensor_record_log_path)
-            if uses_ondotori:
-                logging.info("ondotori api log: %s", settings.resolved_ondotori_api_log_path)
             next_sensor_run = now + sensor_interval
+            try:
+                with SessionLocal() as db:
+                    records = persist_sensor_readings(db, sensor_source.collect())
+            except Exception:
+                logging.exception("runtime sensor collection failed; will retry on next interval")
+            else:
+                logging.info("runtime stored %s sensor records", len(records))
+                logging.info("sensor detail log: %s", settings.resolved_sensor_record_log_path)
+                if uses_ondotori:
+                    logging.info("ondotori api log: %s", settings.resolved_ondotori_api_log_path)
 
         if now >= next_camera_run:
             with SessionLocal() as db:

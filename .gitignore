@@ -15,7 +15,9 @@ storage/images/*
 storage/exports/*
 storage/incoming/*
 storage/runtime/*
+storage/ondotori_imports/*
 !storage/images/.gitkeep
 !storage/exports/.gitkeep
 !storage/incoming/.gitkeep
 !storage/runtime/.gitkeep
+!storage/ondotori_imports/.gitkeep

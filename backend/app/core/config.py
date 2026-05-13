@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     runtime_text_log_path: str = "storage/runtime/runtime.log"
     sensor_record_log_path: str = "storage/runtime/sensor_records.jsonl"
     ondotori_api_log_path: str = "storage/runtime/ondotori_current.jsonl"
+    ondotori_trz_import_path: str = "storage/ondotori_imports"
     backend_base_url: str = "http://localhost:8000"
     frontend_port: int = 3000
     backend_port: int = 8000
@@ -89,6 +90,10 @@ class Settings(BaseSettings):
         return (self.project_root / self.ondotori_api_log_path).resolve()
 
     @property
+    def resolved_ondotori_trz_import_path(self) -> Path:
+        return (self.project_root / self.ondotori_trz_import_path).resolve()
+
+    @property
     def camera_ids(self) -> list[str]:
         return [camera_id.strip() for camera_id in self.camera_ids_csv.split(",") if camera_id.strip()]
 
@@ -108,6 +113,7 @@ class Settings(BaseSettings):
         self.resolved_runtime_text_log_path.parent.mkdir(parents=True, exist_ok=True)
         self.resolved_sensor_record_log_path.parent.mkdir(parents=True, exist_ok=True)
         self.resolved_ondotori_api_log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.resolved_ondotori_trz_import_path.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache
