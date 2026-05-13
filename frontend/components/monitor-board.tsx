@@ -394,7 +394,7 @@ export function MonitorBoard({
     <div className="flex h-[calc(100vh-7.5rem)] min-h-[620px] flex-col gap-3 overflow-hidden">
       <section className="flex shrink-0 items-end justify-between gap-4">
         <div>
-          <h1 className="dashboard-section-title text-[24px]">常時モニター</h1>
+          <h1 className="dashboard-section-title text-[24px]">環境モニタリング</h1>
           <p className="mt-1 text-sm text-[#9cadbf]">
             {monitorMode === "mode1"
               ? `ラベル別平均値と直近${chartPeriods[chartPeriod].label}の推移`
@@ -408,9 +408,8 @@ export function MonitorBoard({
                 key={mode}
                 type="button"
                 onClick={() => setMonitorMode(mode)}
-                className={`rounded-full px-3 py-1 font-medium transition ${
-                  monitorMode === mode ? "bg-white/15 text-white" : "text-[#9cadbf] hover:text-white"
-                }`}
+                className={`rounded-full px-3 py-1 font-medium transition ${monitorMode === mode ? "bg-white/15 text-white" : "text-[#9cadbf] hover:text-white"
+                  }`}
               >
                 {mode === "mode1" ? "モニター1" : "モニター2"}
               </button>
@@ -423,9 +422,8 @@ export function MonitorBoard({
                   key={period}
                   type="button"
                   onClick={() => setChartPeriod(period)}
-                  className={`rounded-full px-3 py-1 font-medium transition ${
-                    chartPeriod === period ? "bg-white/15 text-white" : "text-[#9cadbf] hover:text-white"
-                  }`}
+                  className={`rounded-full px-3 py-1 font-medium transition ${chartPeriod === period ? "bg-white/15 text-white" : "text-[#9cadbf] hover:text-white"
+                    }`}
                 >
                   {chartPeriods[period].label}
                 </button>
@@ -476,120 +474,120 @@ export function MonitorBoard({
               style={{ gridTemplateRows: `repeat(${metricConfigs.length}, minmax(0, 1fr))` }}
             >
               {metricConfigs.map((metric) => {
-            const metricRecords = (records[metric.key] ?? []).filter((record) =>
-              visibleSettings.some((setting) => setting.sensor_key === sensorKeyFromRecord(record)),
-            );
-            const unit = metric.unit || metricRecords[0]?.unit || "";
-            const chartData = buildChartData(metricRecords, displayAreas, metric);
-            const yAxisDomain = chartDomainForSetting(chartSettingsByType.get(metric.key));
+                const metricRecords = (records[metric.key] ?? []).filter((record) =>
+                  visibleSettings.some((setting) => setting.sensor_key === sensorKeyFromRecord(record)),
+                );
+                const unit = metric.unit || metricRecords[0]?.unit || "";
+                const chartData = buildChartData(metricRecords, displayAreas, metric);
+                const yAxisDomain = chartDomainForSetting(chartSettingsByType.get(metric.key));
 
-            return (
-              <div key={metric.key} className="grid min-h-0 gap-3 xl:grid-cols-[0.68fr_1.32fr]">
-                <div className="dashboard-card grid min-h-0 grid-cols-2 grid-rows-[auto_repeat(2,minmax(0,1fr))] gap-2 overflow-hidden rounded-[8px] p-3">
-                  <div className="col-span-2 flex min-w-0 items-center justify-between border-b border-white/10 pb-2">
-                    <h2 className="dashboard-section-title min-w-0 truncate text-[18px]">{metric.label}</h2>
-                    <div className="flex shrink-0 items-center gap-2 text-xs text-[#9cadbf]">
-                      {hiddenAreaCount > 0 ? <span>+{hiddenAreaCount} labels</span> : null}
-                      <span>{unit}</span>
+                return (
+                  <div key={metric.key} className="grid min-h-0 gap-3 xl:grid-cols-[0.68fr_1.32fr]">
+                    <div className="dashboard-card grid min-h-0 grid-cols-2 grid-rows-[auto_repeat(2,minmax(0,1fr))] gap-2 overflow-hidden rounded-[8px] p-3">
+                      <div className="col-span-2 flex min-w-0 items-center justify-between border-b border-white/10 pb-2">
+                        <h2 className="dashboard-section-title min-w-0 truncate text-[18px]">{metric.label}</h2>
+                        <div className="flex shrink-0 items-center gap-2 text-xs text-[#9cadbf]">
+                          {hiddenAreaCount > 0 ? <span>+{hiddenAreaCount} labels</span> : null}
+                          <span>{unit}</span>
+                        </div>
+                      </div>
+                      {displayAreas.map((area) => {
+                        const average = averageLatestFromSettings(
+                          visibleSettings,
+                          area.sensorKeys,
+                          metric.key,
+                        );
+                        const level = alertLevelForLabels(
+                          sensorLabels,
+                          [area.label],
+                          metric.key,
+                          average.average,
+                        );
+
+                        return (
+                          <article
+                            key={area.label}
+                            className={`flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[8px] border px-2.5 py-2 ${alertBorderClass(level)}`}
+                          >
+                            <p className="truncate text-xs font-semibold text-[#9cadbf]">{area.label}</p>
+                            <p
+                              className={`mt-1 min-w-0 truncate font-semibold leading-none ${alertTextClass(level)}`}
+                              style={{ fontSize: "clamp(1rem, 1.45vw, 1.5rem)" }}
+                            >
+                              {formatMetricValue(average.average, average.unit ?? unit, metric.digits)}
+                            </p>
+                            <p className="mt-auto min-w-0 truncate pt-1 text-[10px] leading-tight text-[#9cadbf]">
+                              n={average.count} / {formatJapanDateTime(average.latestTimestamp, { seconds: true })}
+                            </p>
+                          </article>
+                        );
+                      })}
+                    </div>
+
+                    <div className="dashboard-card min-h-0 overflow-hidden rounded-[8px] p-2">
+                      <div className="relative h-full min-h-[120px]">
+                        {chartData.length === 0 ? (
+                          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-sm text-[#9cadbf]">
+                            この期間のデータはありません
+                          </div>
+                        ) : null}
+                        <ResponsiveContainer>
+                          <LineChart
+                            data={chartData}
+                            margin={{ left: 0, right: 16, top: 10, bottom: 0 }}
+                          >
+                            <CartesianGrid stroke="rgba(84, 99, 113, 0.18)" strokeDasharray="4 4" />
+                            <XAxis
+                              dataKey="timestampMs"
+                              tick={{ fill: "#9cadbf", fontSize: 11 }}
+                              tickLine={false}
+                              axisLine={false}
+                              minTickGap={28}
+                              type="number"
+                              scale="time"
+                              domain={["dataMin", "dataMax"]}
+                              tickFormatter={(value) => formatTimeTick(Number(value))}
+                            />
+                            <YAxis
+                              tick={{ fill: "#9cadbf", fontSize: 11 }}
+                              tickLine={false}
+                              axisLine={false}
+                              domain={yAxisDomain}
+                              unit={unit}
+                            />
+                            <Tooltip
+                              labelFormatter={(value) => `${formatTimeTick(Number(value))} JST`}
+                              formatter={(value, name) => [
+                                `${Number(value).toFixed(metric.digits)} ${unit}`,
+                                name,
+                              ]}
+                              contentStyle={{
+                                borderRadius: 8,
+                                border: "1px solid rgba(84, 99, 113, 0.4)",
+                                backgroundColor: "rgba(31, 33, 35, 0.98)",
+                                color: "#ffffff",
+                              }}
+                            />
+                            <Customized component={<GapAwareLines areas={chartAreas} data={chartData} />} />
+                            {chartAreas.map((area) => (
+                              <Line
+                                key={`${metric.key}-${area.label}`}
+                                type="linear"
+                                dataKey={seriesKeyForArea(area)}
+                                name={area.label}
+                                stroke="transparent"
+                                strokeWidth={8}
+                                dot={false}
+                                connectNulls
+                                activeDot={{ r: 4, fill: area.color, stroke: area.color }}
+                              />
+                            ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
                   </div>
-                  {displayAreas.map((area) => {
-                    const average = averageLatestFromSettings(
-                      visibleSettings,
-                      area.sensorKeys,
-                      metric.key,
-                    );
-                    const level = alertLevelForLabels(
-                      sensorLabels,
-                      [area.label],
-                      metric.key,
-                      average.average,
-                    );
-
-                    return (
-                      <article
-                        key={area.label}
-                        className={`flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[8px] border px-2.5 py-2 ${alertBorderClass(level)}`}
-                      >
-                        <p className="truncate text-xs font-semibold text-[#9cadbf]">{area.label}</p>
-                        <p
-                          className={`mt-1 min-w-0 truncate font-semibold leading-none ${alertTextClass(level)}`}
-                          style={{ fontSize: "clamp(1rem, 1.45vw, 1.5rem)" }}
-                        >
-                          {formatMetricValue(average.average, average.unit ?? unit, metric.digits)}
-                        </p>
-                        <p className="mt-auto min-w-0 truncate pt-1 text-[10px] leading-tight text-[#9cadbf]">
-                          n={average.count} / {formatJapanDateTime(average.latestTimestamp, { seconds: true })}
-                        </p>
-                      </article>
-                    );
-                  })}
-                </div>
-
-                <div className="dashboard-card min-h-0 overflow-hidden rounded-[8px] p-2">
-                  <div className="relative h-full min-h-[120px]">
-                    {chartData.length === 0 ? (
-                      <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-sm text-[#9cadbf]">
-                        この期間のデータはありません
-                      </div>
-                    ) : null}
-                    <ResponsiveContainer>
-                      <LineChart
-                        data={chartData}
-                        margin={{ left: 0, right: 16, top: 10, bottom: 0 }}
-                      >
-                        <CartesianGrid stroke="rgba(84, 99, 113, 0.18)" strokeDasharray="4 4" />
-                        <XAxis
-                          dataKey="timestampMs"
-                          tick={{ fill: "#9cadbf", fontSize: 11 }}
-                          tickLine={false}
-                          axisLine={false}
-                          minTickGap={28}
-                          type="number"
-                          scale="time"
-                          domain={["dataMin", "dataMax"]}
-                          tickFormatter={(value) => formatTimeTick(Number(value))}
-                        />
-                        <YAxis
-                          tick={{ fill: "#9cadbf", fontSize: 11 }}
-                          tickLine={false}
-                          axisLine={false}
-                          domain={yAxisDomain}
-                          unit={unit}
-                        />
-                        <Tooltip
-                          labelFormatter={(value) => `${formatTimeTick(Number(value))} JST`}
-                          formatter={(value, name) => [
-                            `${Number(value).toFixed(metric.digits)} ${unit}`,
-                            name,
-                          ]}
-                          contentStyle={{
-                            borderRadius: 8,
-                            border: "1px solid rgba(84, 99, 113, 0.4)",
-                            backgroundColor: "rgba(31, 33, 35, 0.98)",
-                            color: "#ffffff",
-                          }}
-                        />
-                        <Customized component={<GapAwareLines areas={chartAreas} data={chartData} />} />
-                        {chartAreas.map((area) => (
-                          <Line
-                            key={`${metric.key}-${area.label}`}
-                            type="linear"
-                            dataKey={seriesKeyForArea(area)}
-                            name={area.label}
-                            stroke="transparent"
-                            strokeWidth={8}
-                            dot={false}
-                            connectNulls
-                            activeDot={{ r: 4, fill: area.color, stroke: area.color }}
-                          />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-            );
+                );
               })}
             </section>
           ) : (
@@ -598,32 +596,32 @@ export function MonitorBoard({
                 <div className="grid gap-3 lg:grid-cols-3">
                   {labelAverages.map((area) => (
                     <article key={area.label} className="dashboard-card rounded-[8px] p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <h3 className="truncate text-base font-semibold text-white">{area.label}</h3>
-                            <p className="mt-1 line-clamp-2 text-xs text-[#9cadbf]">
-                              {area.settings.map(sensorDisplayName).join(" / ")}
-                            </p>
-                          </div>
-                          <span className="shrink-0 rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-[#9cadbf]">
-                            {area.settings.length}センサー
-                          </span>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="truncate text-base font-semibold text-white">{area.label}</h3>
+                          <p className="mt-1 line-clamp-2 text-xs text-[#9cadbf]">
+                            {area.settings.map(sensorDisplayName).join(" / ")}
+                          </p>
                         </div>
-                        <div className="mt-3 grid gap-2">
-                          {area.metrics.map((metric) => (
-                            <div key={metric.sensorType} className="flex items-start justify-between gap-3 text-sm">
-                              <span className="text-[#9cadbf]">{metric.label}</span>
-                              <span className={`text-right font-semibold ${alertTextClass(metric.level)}`}>
-                                {formatMetricValue(metric.average, metric.unit, metric.digits)}
-                                <span className="ml-2 text-xs font-normal text-[#9cadbf]">n={metric.count}</span>
-                                <span className="block text-[11px] font-normal text-[#9cadbf]">
-                                  {formatJapanDateTime(metric.latestTimestamp, { seconds: true })}
-                                </span>
+                        <span className="shrink-0 rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-[#9cadbf]">
+                          {area.settings.length}センサー
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        {area.metrics.map((metric) => (
+                          <div key={metric.sensorType} className="flex items-start justify-between gap-3 text-sm">
+                            <span className="text-[#9cadbf]">{metric.label}</span>
+                            <span className={`text-right font-semibold ${alertTextClass(metric.level)}`}>
+                              {formatMetricValue(metric.average, metric.unit, metric.digits)}
+                              <span className="ml-2 text-xs font-normal text-[#9cadbf]">n={metric.count}</span>
+                              <span className="block text-[11px] font-normal text-[#9cadbf]">
+                                {formatJapanDateTime(metric.latestTimestamp, { seconds: true })}
                               </span>
-                            </div>
-                          ))}
-                        </div>
-                      </article>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
                   ))}
                 </div>
               ) : (
