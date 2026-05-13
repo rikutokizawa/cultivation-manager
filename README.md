@@ -130,6 +130,17 @@ pnpm dev
 .venv/bin/python -m backend.scripts.run_runtime
 ```
 
+### おんどとりTRZデータ取り込み
+
+ダウンロードした `.trz` を取り込み待ちフォルダへ置いてから実行します。
+
+```bash
+cp /path/to/*.trz storage/ondotori_imports/
+.venv/bin/python -m backend.scripts.import_ondotori_trz
+```
+
+成功した `.trz` は取り込み後に削除されます。
+
 ## Backend 起動
 
 ```bash

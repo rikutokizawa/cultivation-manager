@@ -8,8 +8,22 @@ from backend.app.models.sensor_record import SensorRecord
 from backend.app.schemas.sensor_display_setting import SensorDisplaySettingRead, normalize_labels
 
 
+def normalize_sensor_source(source: str) -> str:
+    if source in {"ondotori-current", "ondotori-trz"}:
+        return "ondotori"
+    return source
+
+
 def build_sensor_key(source: str, sensor_type: str, sensor_id: str) -> str:
-    return f"{source}:{sensor_type}:{sensor_id}"
+    return f"{normalize_sensor_source(source)}:{sensor_type}:{sensor_id}"
+
+
+def normalize_sensor_key(sensor_key: str) -> str:
+    parts = sensor_key.split(":", maxsplit=2)
+    if len(parts) != 3:
+        return sensor_key
+    source, sensor_type, sensor_id = parts
+    return build_sensor_key(source, sensor_type, sensor_id)
 
 
 def build_sensor_key_for_record(record: SensorRecord) -> str:

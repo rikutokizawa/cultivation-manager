@@ -32,11 +32,18 @@ const metricColors = [
 ];
 
 export function sensorKeyFromParts(source: string, sensorType: string, sensorId: string) {
-  return `${source}:${sensorType}:${sensorId}`;
+  return `${normalizeSensorSource(source)}:${sensorType}:${sensorId}`;
 }
 
 export function sensorKeyFromRecord(record: SensorRecord) {
   return sensorKeyFromParts(record.source, record.sensor_type, record.sensor_id);
+}
+
+export function normalizeSensorSource(source: string) {
+  if (source === "ondotori-current" || source === "ondotori-trz") {
+    return "ondotori";
+  }
+  return source;
 }
 
 export function parseLabelInput(value: string) {

@@ -66,7 +66,10 @@ async function fetchMonitorData(period: ChartPeriodKey) {
   const entries = await Promise.all(
     sensorTypesForSettings(sensorSettings).map(async (sensorType) => [
       sensorType,
-      await getSensorSeries(sensorType, chartPeriods[period].limit, undefined, { startAt }),
+      await getSensorSeries(sensorType, chartPeriods[period].limit, undefined, {
+        startAt,
+        perSensorLimit: true,
+      }),
     ] as const),
   );
 

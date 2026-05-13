@@ -20,6 +20,10 @@ class TrzChannelDefinition:
     sensor_type: str
     unit: str
     scale: float
+    offset: float = 0.0
+
+    def convert(self, raw_value: int) -> float:
+        return round((raw_value + self.offset) * self.scale, 3)
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,16 +33,19 @@ class TrzImportResult:
     inserted_count: int
     skipped_duplicate_count: int
     deleted: bool
+    devices: tuple[str, ...]
+    started_at: datetime | None
+    ended_at: datetime | None
 
 
 RTR_576_CHANNELS = {
     "66": TrzChannelDefinition(sensor_type="co2", unit="ppm", scale=1.0),
-    "13": TrzChannelDefinition(sensor_type="temperature", unit="C", scale=0.01),
-    "209": TrzChannelDefinition(sensor_type="humidity", unit="%", scale=0.01),
+    "13": TrzChannelDefinition(sensor_type="temperature", unit="C", scale=0.1, offset=-1000),
+    "209": TrzChannelDefinition(sensor_type="humidity", unit="%", scale=0.1, offset=-1000),
 }
 
 RTR_502_CHANNELS = {
-    "13": TrzChannelDefinition(sensor_type="temperature", unit="C", scale=0.01),
+    "13": TrzChannelDefinition(sensor_type="temperature", unit="C", scale=0.1, offset=-1000),
 }
 
 
@@ -80,7 +87,7 @@ def parse_ondotori_trz(path: Path) -> list[CollectedSensorReading]:
                     sensor_type=definition.sensor_type,
                     sensor_id=f"{serial}-ch{channel_num}",
                     location=location,
-                    value=raw_value * definition.scale,
+                    value=definition.convert(raw_value),
                     unit=definition.unit,
                     source="ondotori-trz",
                     note=f"{model} {name} channel={channel_num} imported from {path.name}",
@@ -99,6 +106,9 @@ def import_ondotori_trz_file(
 ) -> TrzImportResult:
     readings = parse_ondotori_trz(path)
     deduped_readings, skipped_duplicate_count = _drop_duplicate_readings(db, readings)
+    devices = _describe_devices(readings)
+    started_at = min((reading.timestamp for reading in readings), default=None)
+    ended_at = max((reading.timestamp for reading in readings), default=None)
 
     inserted_count = 0
     if not dry_run:
@@ -112,6 +122,9 @@ def import_ondotori_trz_file(
         inserted_count=inserted_count,
         skipped_duplicate_count=skipped_duplicate_count,
         deleted=delete_after_success and not dry_run,
+        devices=devices,
+        started_at=started_at,
+        ended_at=ended_at,
     )
 
 
@@ -195,6 +208,18 @@ def _drop_duplicate_readings(
         deduped.append(reading)
 
     return deduped, skipped
+
+
+def _describe_devices(readings: list[CollectedSensorReading]) -> tuple[str, ...]:
+    devices: dict[str, set[str]] = {}
+    for reading in readings:
+        device = reading.note.split(" channel=", maxsplit=1)[0] if reading.note else reading.sensor_id
+        devices.setdefault(device, set()).add(reading.sensor_type)
+
+    return tuple(
+        f"{device} ({', '.join(sorted(sensor_types))})"
+        for device, sensor_types in sorted(devices.items())
+    )
 
 
 def _timestamp_key(timestamp: datetime) -> datetime:

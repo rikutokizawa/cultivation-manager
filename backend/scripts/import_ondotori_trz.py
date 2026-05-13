@@ -1,5 +1,6 @@
 import argparse
 import logging
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from backend.app.core.config import get_settings
@@ -64,8 +65,11 @@ def main() -> None:
             inserted_count += result.inserted_count
             skipped_duplicate_count += result.skipped_duplicate_count
             logging.info(
-                "imported %s parsed=%s inserted=%s skipped_duplicates=%s deleted=%s",
+                "imported %s devices=%s period=%s..%s parsed=%s inserted=%s skipped_duplicates=%s deleted=%s",
                 path.name,
+                "; ".join(result.devices) or "unknown",
+                _format_jst(result.started_at),
+                _format_jst(result.ended_at),
                 result.parsed_count,
                 result.inserted_count,
                 result.skipped_duplicate_count,
@@ -81,6 +85,12 @@ def main() -> None:
         skipped_duplicate_count,
         input_dir,
     )
+
+
+def _format_jst(value: datetime | None) -> str:
+    if value is None:
+        return "unknown"
+    return value.astimezone(timezone(timedelta(hours=9))).strftime("%Y-%m-%d %H:%M:%S JST")
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ export default async function DashboardPage() {
   const recordEntries = await Promise.all(
     sensorTypes.map(async (sensorType) => [
       sensorType,
-      await getSensorSeries(sensorType, 240),
+      await getSensorSeries(sensorType, 240, undefined, { perSensorLimit: true }),
     ] as const),
   );
 

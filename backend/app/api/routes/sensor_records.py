@@ -18,6 +18,7 @@ def list_sensor_records(
     start_at: datetime | None = None,
     end_at: datetime | None = None,
     limit: int = Query(default=200, ge=1, le=2000),
+    per_sensor_limit: bool = False,
     db: Session = Depends(get_db),
 ) -> list[SensorRecord]:
     statement: Select[tuple[SensorRecord]] = select(SensorRecord)
@@ -31,8 +32,23 @@ def list_sensor_records(
     if end_at:
         statement = statement.filter(SensorRecord.timestamp <= end_at)
 
-    statement = statement.order_by(SensorRecord.timestamp.desc(), SensorRecord.id.desc()).limit(limit)
-    return list(db.scalars(statement).all())
+    statement = statement.order_by(SensorRecord.timestamp.desc(), SensorRecord.id.desc())
+
+    if not per_sensor_limit:
+        statement = statement.limit(limit)
+        return list(db.scalars(statement).all())
+
+    records: list[SensorRecord] = []
+    counts_by_sensor: dict[tuple[str, str, str], int] = {}
+    for record in db.scalars(statement):
+        sensor_key = (record.source, record.sensor_type, record.sensor_id)
+        count = counts_by_sensor.get(sensor_key, 0)
+        if count >= limit:
+            continue
+        records.append(record)
+        counts_by_sensor[sensor_key] = count + 1
+
+    return records
 
 
 @router.post("", response_model=SensorRecordRead, status_code=201)

@@ -100,6 +100,7 @@ export function getSensorSeries(
   params?: {
     startAt?: string;
     endAt?: string;
+    perSensorLimit?: boolean;
   },
 ) {
   const searchParams = new URLSearchParams({
@@ -115,6 +116,9 @@ export function getSensorSeries(
   }
   if (params?.endAt) {
     searchParams.set("end_at", params.endAt);
+  }
+  if (params?.perSensorLimit) {
+    searchParams.set("per_sensor_limit", "true");
   }
 
   return requestJson<SensorRecord[]>(`/sensor-records?${searchParams.toString()}`);
