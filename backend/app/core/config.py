@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     ondotori_trz_import_path: str = "storage/ondotori_imports"
     backend_base_url: str = "http://localhost:8000"
     frontend_port: int = 3000
+    frontend_allowed_origins: str = ""
     backend_port: int = 8000
     sensor_source_type: str = "dummy"
     camera_source_type: str = "dummy"
@@ -88,6 +89,14 @@ class Settings(BaseSettings):
     @property
     def resolved_ondotori_api_log_path(self) -> Path:
         return (self.project_root / self.ondotori_api_log_path).resolve()
+
+    @property
+    def frontend_allowed_origin_list(self) -> list[str]:
+        return [
+            origin.strip()
+            for origin in self.frontend_allowed_origins.split(",")
+            if origin.strip()
+        ]
 
     @property
     def resolved_ondotori_trz_import_path(self) -> Path:

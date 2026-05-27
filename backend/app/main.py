@@ -30,6 +30,7 @@ app.add_middleware(
     allow_origins=[
         f"http://localhost:{settings.frontend_port}",
         "http://127.0.0.1:3000",
+        *settings.frontend_allowed_origin_list,
     ],
     allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1):\d+$",
     allow_credentials=True,

@@ -85,6 +85,8 @@ RUNTIME_TEXT_LOG_PATH=storage/runtime/runtime.log
 SENSOR_RECORD_LOG_PATH=storage/runtime/sensor_records.jsonl
 ONDOTORI_API_LOG_PATH=storage/runtime/ondotori_current.jsonl
 
+BACKEND_BASE_URL=http://localhost:8000
+FRONTEND_ALLOWED_ORIGINS=
 SENSOR_SOURCE_TYPE=dummy
 CAMERA_SOURCE_TYPE=dummy
 SENSOR_POLL_INTERVAL_SECONDS=300
@@ -180,10 +182,34 @@ cp frontend/.env.local.example frontend/.env.local
 NEXT_PUBLIC_BACKEND_BASE_URL=http://127.0.0.1:8000
 ```
 
+Raspberry Pi 上で backend / frontend を常時起動し、同じネットワーク内のPCからも frontend にアクセスする場合は、Pi の LAN IP を使います。
+
+ルートの `.env`:
+
+```text
+BACKEND_BASE_URL=http://<PiのLAN IP>:8000
+FRONTEND_ALLOWED_ORIGINS=http://<PiのLAN IP>:3000
+```
+
+`frontend/.env.local`:
+
+```text
+NEXT_PUBLIC_BACKEND_BASE_URL=http://<PiのLAN IP>:8000
+```
+
+`NEXT_PUBLIC_BACKEND_BASE_URL` は build 時に反映されるため、変更後は `pnpm build` を再実行してください。
+
 別ポートで起動する場合:
 
 ```bash
 pnpm dev -- --port 3001
+```
+
+本番相当で起動する場合:
+
+```bash
+pnpm build
+pnpm start
 ```
 
 ## 画面

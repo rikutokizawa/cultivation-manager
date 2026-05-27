@@ -1,0 +1,15 @@
+[Unit]
+Description=Cultivation Manager Next.js Frontend
+After=network.target cultivation-backend.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/cultivation-manager/frontend
+Environment=NODE_ENV=production
+EnvironmentFile=-%h/cultivation-manager/frontend/.env.local
+ExecStart=/usr/bin/env pnpm start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
