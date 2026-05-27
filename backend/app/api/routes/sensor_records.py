@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db
@@ -21,34 +21,46 @@ def list_sensor_records(
     per_sensor_limit: bool = False,
     db: Session = Depends(get_db),
 ) -> list[SensorRecord]:
-    statement: Select[tuple[SensorRecord]] = select(SensorRecord)
+    filters = []
 
     if sensor_type:
-        statement = statement.filter(SensorRecord.sensor_type == sensor_type)
+        filters.append(SensorRecord.sensor_type == sensor_type)
     if source:
-        statement = statement.filter(SensorRecord.source == source)
+        filters.append(SensorRecord.source == source)
     if start_at:
-        statement = statement.filter(SensorRecord.timestamp >= start_at)
+        filters.append(SensorRecord.timestamp >= start_at)
     if end_at:
-        statement = statement.filter(SensorRecord.timestamp <= end_at)
-
-    statement = statement.order_by(SensorRecord.timestamp.desc(), SensorRecord.id.desc())
+        filters.append(SensorRecord.timestamp <= end_at)
 
     if not per_sensor_limit:
+        statement: Select[tuple[SensorRecord]] = select(SensorRecord)
+        if filters:
+            statement = statement.filter(*filters)
+        statement = statement.order_by(SensorRecord.timestamp.desc(), SensorRecord.id.desc())
         statement = statement.limit(limit)
         return list(db.scalars(statement).all())
 
-    records: list[SensorRecord] = []
-    counts_by_sensor: dict[tuple[str, str, str], int] = {}
-    for record in db.scalars(statement):
-        sensor_key = (record.source, record.sensor_type, record.sensor_id)
-        count = counts_by_sensor.get(sensor_key, 0)
-        if count >= limit:
-            continue
-        records.append(record)
-        counts_by_sensor[sensor_key] = count + 1
+    row_number = func.row_number().over(
+        partition_by=(
+            SensorRecord.source,
+            SensorRecord.sensor_type,
+            SensorRecord.sensor_id,
+        ),
+        order_by=(SensorRecord.timestamp.desc(), SensorRecord.id.desc()),
+    ).label("row_number")
+    ranked_records = select(SensorRecord.id, row_number)
+    if filters:
+        ranked_records = ranked_records.filter(*filters)
+    ranked_records = ranked_records.subquery()
 
-    return records
+    statement = (
+        select(SensorRecord)
+        .join(ranked_records, SensorRecord.id == ranked_records.c.id)
+        .filter(ranked_records.c.row_number <= limit)
+        .order_by(SensorRecord.timestamp.desc(), SensorRecord.id.desc())
+    )
+
+    return list(db.scalars(statement).all())
 
 
 @router.post("", response_model=SensorRecordRead, status_code=201)
