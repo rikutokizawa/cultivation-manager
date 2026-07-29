@@ -32,6 +32,8 @@ export type Overview = {
     state: "online" | "stale";
     checked_at: string;
     last_sensor_at: string | null;
+    warning_after_seconds: number;
+    stale_after_seconds: number;
     detail: string;
   };
 };

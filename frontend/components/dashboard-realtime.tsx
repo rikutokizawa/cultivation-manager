@@ -58,11 +58,15 @@ function ageInMinutes(timestamp: string | undefined, referenceTimestamp: string)
   return Math.max(0, elapsedMilliseconds / 60_000);
 }
 
-function timestampColorClass(ageMinutes: number) {
-  if (ageMinutes >= 30) {
+function timestampColorClass(
+  ageMinutes: number,
+  warningAfterMinutes: number,
+  staleAfterMinutes: number,
+) {
+  if (ageMinutes >= staleAfterMinutes) {
     return "text-[#ff8f7f]";
   }
-  if (ageMinutes >= 15) {
+  if (ageMinutes >= warningAfterMinutes) {
     return "text-[#f6d365]";
   }
   return "text-[#7cc7ff]";
@@ -84,6 +88,8 @@ export function DashboardRealtime({ initialOverview }: DashboardRealtimeProps) {
   const trzInputRef = useRef<HTMLInputElement>(null);
 
   const readings = useMemo(() => allReadings(overview), [overview]);
+  const warningAfterMinutes = overview.status.warning_after_seconds / 60;
+  const staleAfterMinutes = overview.status.stale_after_seconds / 60;
   const selectedReading = readings.find((reading) => readingKey(reading) === selectedKey);
   const sensorTypes = useMemo(
     () =>
@@ -302,7 +308,7 @@ export function DashboardRealtime({ initialOverview }: DashboardRealtimeProps) {
                           className={`px-3 py-4 text-lg font-semibold ${
                             !reading
                               ? "text-[#68727d]"
-                              : readingAgeMinutes >= 30
+                              : readingAgeMinutes >= staleAfterMinutes
                                 ? "text-white/35"
                                 : "text-white"
                           }`}
@@ -314,6 +320,8 @@ export function DashboardRealtime({ initialOverview }: DashboardRealtimeProps) {
                     <td
                       className={`px-3 py-4 text-xs font-medium ${timestampColorClass(
                         latestAgeMinutes,
+                        warningAfterMinutes,
+                        staleAfterMinutes,
                       )}`}
                     >
                       {formatJapanDateTime(latestTimestamp, { seconds: true })}

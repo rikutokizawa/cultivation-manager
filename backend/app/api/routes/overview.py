@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.app.core.config import get_settings
 from backend.app.db.session import get_db
 from backend.app.models.image_record import ImageRecord
 from backend.app.models.sensor_record import SensorRecord
@@ -17,6 +16,9 @@ from backend.app.schemas.overview import (
 )
 
 router = APIRouter()
+
+WARNING_AFTER_SECONDS = 15 * 60
+STALE_AFTER_SECONDS = 30 * 60
 
 
 def _device_id(sensor_id: str) -> str:
@@ -80,7 +82,6 @@ def _latest_camera_images(db: Session) -> list[ImageRecord]:
 
 @router.get("/overview", response_model=OverviewResponse)
 def get_overview(db: Session = Depends(get_db)) -> OverviewResponse:
-    settings = get_settings()
     records = _latest_sensor_records(db)
     images = _latest_camera_images(db)
     devices: dict[str, OverviewDevice] = {}
@@ -108,7 +109,7 @@ def get_overview(db: Session = Depends(get_db)) -> OverviewResponse:
 
     latest_sensor_at = max((record.timestamp for record in records), default=None)
     latest_sensor_at_utc = _as_utc(latest_sensor_at) if latest_sensor_at is not None else None
-    stale_after = timedelta(seconds=max(settings.sensor_poll_interval_seconds * 2, 300))
+    stale_after = timedelta(seconds=STALE_AFTER_SECONDS)
     is_online = (
         latest_sensor_at_utc is not None
         and datetime.now(UTC) - latest_sensor_at_utc <= stale_after
@@ -121,6 +122,8 @@ def get_overview(db: Session = Depends(get_db)) -> OverviewResponse:
             state="online" if is_online else "stale",
             checked_at=datetime.now(UTC),
             last_sensor_at=latest_sensor_at_utc,
+            warning_after_seconds=WARNING_AFTER_SECONDS,
+            stale_after_seconds=STALE_AFTER_SECONDS,
             detail=(
                 "おんどとりのデータを正常に取得しています。"
                 if is_online

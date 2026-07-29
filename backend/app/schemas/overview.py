@@ -24,6 +24,8 @@ class OverviewStatus(BaseModel):
     state: str
     checked_at: datetime
     last_sensor_at: datetime | None
+    warning_after_seconds: int
+    stale_after_seconds: int
     detail: str
 
 
