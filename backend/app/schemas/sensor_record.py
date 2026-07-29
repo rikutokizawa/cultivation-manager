@@ -14,12 +14,7 @@ class SensorRecordBase(BaseModel):
     note: str | None = None
 
 
-class SensorRecordCreate(SensorRecordBase):
-    pass
-
-
 class SensorRecordRead(SensorRecordBase):
     id: int
 
     model_config = ConfigDict(from_attributes=True)
-

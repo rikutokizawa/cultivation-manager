@@ -1,7 +1,6 @@
 import argparse
 import logging
 import time
-from pathlib import Path
 
 from backend.app.core.config import get_settings
 from backend.app.db.base import Base
@@ -13,11 +12,6 @@ from backend.app.services.sensor_sources import build_sensor_source
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Collect sensor readings and store them in SQLite.")
-    parser.add_argument(
-        "--source",
-        help="Sensor source type. Supports dummy, json, command, onewire or comma-separated combinations.",
-    )
-    parser.add_argument("--json-path", help="JSON file used when source=json.")
     parser.add_argument("--loop", action="store_true", help="Run continuously.")
     parser.add_argument("--interval", type=int, help="Polling interval in seconds.")
     parser.add_argument("--iterations", type=int, help="Stop after N loops when --loop is enabled.")
@@ -32,13 +26,7 @@ def main() -> None:
 
     configure_runtime_logging(settings)
 
-    source = build_sensor_source(
-        settings=settings,
-        source_type=args.source,
-        json_path=Path(args.json_path) if args.json_path else None,
-    )
-    selected_source = args.source or settings.sensor_source_type
-    uses_ondotori = "ondotori" in {item.strip().lower() for item in selected_source.split(",")}
+    source = build_sensor_source(settings)
     interval = args.interval or settings.sensor_poll_interval_seconds
 
     iteration = 0
@@ -47,8 +35,7 @@ def main() -> None:
             records = persist_sensor_readings(db, source.collect())
         logging.info("stored %s sensor records", len(records))
         logging.info("sensor detail log: %s", settings.resolved_sensor_record_log_path)
-        if uses_ondotori:
-            logging.info("ondotori api log: %s", settings.resolved_ondotori_api_log_path)
+        logging.info("ondotori api log: %s", settings.resolved_ondotori_api_log_path)
 
         if not args.loop:
             break

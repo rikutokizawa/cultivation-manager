@@ -1,14 +1,8 @@
 import { backendBaseUrl } from "@/lib/config";
 import type {
-  LatestStatus,
-  ManualRecord,
-  SensorLabel,
-  SensorLabelInput,
-  SensorChartSetting,
-  SensorChartSettingInput,
+  Overview,
   SensorRecord,
-  SensorSetting,
-  SensorSettingUpdate,
+  TrzImportResponse,
 } from "@/types/api";
 
 async function requestJson<T>(path: string, options?: RequestInit): Promise<T> {
@@ -32,84 +26,26 @@ export function getHealth() {
   return requestJson<{ status: string; app_name: string }>("/health");
 }
 
-export function getLatestStatus() {
-  return requestJson<LatestStatus>("/latest-status");
-}
-
-export function getTemperatureSeries(limit = 48) {
-  return requestJson<SensorRecord[]>(
-    `/sensor-records?sensor_type=temperature&limit=${limit}`,
-  );
-}
-
-export function getSensorSettings() {
-  return requestJson<SensorSetting[]>("/sensor-settings");
-}
-
-export function updateSensorSetting(sensorKey: string, payload: SensorSettingUpdate) {
-  return requestJson<SensorSetting>(`/sensor-settings/${encodeURIComponent(sensorKey)}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-}
-
-export function getSensorChartSettings() {
-  return requestJson<SensorChartSetting[]>("/sensor-chart-settings");
-}
-
-export function updateSensorChartSetting(sensorType: string, payload: SensorChartSettingInput) {
-  return requestJson<SensorChartSetting>(`/sensor-chart-settings/${encodeURIComponent(sensorType)}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-}
-
-export function getSensorLabels() {
-  return requestJson<SensorLabel[]>("/sensor-labels");
-}
-
-export function createSensorLabel(payload: SensorLabelInput) {
-  return requestJson<SensorLabel>("/sensor-labels", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export function updateSensorLabel(labelId: number, payload: SensorLabelInput) {
-  return requestJson<SensorLabel>(`/sensor-labels/${labelId}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function deleteSensorLabel(labelId: number) {
-  const response = await fetch(`${backendBaseUrl}/sensor-labels/${labelId}`, {
-    method: "DELETE",
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
-  }
+export function getOverview() {
+  return requestJson<Overview>("/overview");
 }
 
 export function getSensorSeries(
   sensorType: string,
-  limit = 48,
-  source?: string,
   params?: {
+    sensorId?: string;
     startAt?: string;
     endAt?: string;
-    perSensorLimit?: boolean;
+    limit?: number;
   },
 ) {
   const searchParams = new URLSearchParams({
     sensor_type: sensorType,
-    limit: String(limit),
+    limit: String(params?.limit ?? 5000),
   });
 
-  if (source) {
-    searchParams.set("source", source);
+  if (params?.sensorId) {
+    searchParams.set("sensor_id", params.sensorId);
   }
   if (params?.startAt) {
     searchParams.set("start_at", params.startAt);
@@ -117,29 +53,23 @@ export function getSensorSeries(
   if (params?.endAt) {
     searchParams.set("end_at", params.endAt);
   }
-  if (params?.perSensorLimit) {
-    searchParams.set("per_sensor_limit", "true");
-  }
-
   return requestJson<SensorRecord[]>(`/sensor-records?${searchParams.toString()}`);
 }
 
-export function getManualRecords(limit = 10) {
-  return requestJson<ManualRecord[]>(`/manual-records?limit=${limit}`);
-}
-
-export function createManualRecord(payload: Omit<ManualRecord, "id">) {
-  return requestJson<ManualRecord>("/manual-records", {
+export async function importTrzFiles(files: File[]) {
+  const body = new FormData();
+  files.forEach((file) => body.append("files", file));
+  const response = await fetch(`${backendBaseUrl}/import-trz`, {
     method: "POST",
-    body: JSON.stringify(payload),
+    body,
   });
-}
 
-export function createSensorRecord(payload: Omit<SensorRecord, "id">) {
-  return requestJson<SensorRecord>("/sensor-records", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(payload?.detail ?? `TRZ import failed: ${response.status} ${response.statusText}`);
+  }
+
+  return (await response.json()) as TrzImportResponse;
 }
 
 export function getSensorExportUrl(params: {

@@ -1,493 +1,424 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { ExportForm } from "@/components/export-form";
 import { LatestImages } from "@/components/latest-images";
-import { SectionCard } from "@/components/section-card";
 import { SensorLineChart } from "@/components/sensor-line-chart";
-import { StatusCard } from "@/components/status-card";
+import { getOverview, getSensorSeries, importTrzFiles } from "@/lib/api";
 import {
-  getLatestStatus,
-  getSensorChartSettings,
-  getSensorLabels,
-  getSensorSeries,
-  getSensorSettings,
-} from "@/lib/api";
-import { compareBackendTimestamps, formatJapanDateTime } from "@/lib/datetime";
+  backendTimestampToMilliseconds,
+  formatJapanDateTime,
+} from "@/lib/datetime";
 import {
-  type AlertLevel,
-  alertBorderClass,
-  alertLevelForLabels,
-  alertTextClass,
-  compareLabelNames,
-  compareSensorSettings,
-  formatLabelPrefix,
+  compareSensorTypes,
   formatMetricValue,
-  labelsForSetting,
-  latestRecordsBySensor,
   metricConfigForType,
-  metricConfigsForSettings,
-  sensorDisplayName,
-  sensorKeyFromRecord,
-  sensorTypesForSettings,
-  visibleSensorSettings,
 } from "@/lib/sensors";
-import type { LatestStatus, SensorChartSetting, SensorLabel, SensorRecord, SensorSetting } from "@/types/api";
-
-type DashboardData = {
-  latestStatus: LatestStatus;
-  sensorSettings: SensorSetting[];
-  sensorLabels: SensorLabel[];
-  sensorChartSettings: SensorChartSetting[];
-  recordsByType: Record<string, SensorRecord[]>;
-};
+import type { Overview, OverviewReading, SensorRecord } from "@/types/api";
 
 type DashboardRealtimeProps = {
-  initialData: DashboardData;
+  initialOverview: Overview;
 };
 
-type LabelMetric = {
-  sensorType: string;
-  label: string;
-  level: AlertLevel;
-  average: number | undefined;
-  unit: string | undefined;
-  count: number;
-  latestTimestamp: string | undefined;
+type PeriodKey = "6h" | "24h" | "7d";
+
+const periods: Record<PeriodKey, { label: string; hours: number }> = {
+  "6h": { label: "6時間", hours: 6 },
+  "24h": { label: "24時間", hours: 24 },
+  "7d": { label: "7日", hours: 24 * 7 },
 };
 
-const refreshIntervalMs = 60_000;
-const accentCycle = ["green", "blue", "amber", "slate"] as const;
-
-async function fetchDashboardData(): Promise<DashboardData> {
-  const [latestStatus, sensorSettings, sensorLabels, sensorChartSettings] = await Promise.all([
-    getLatestStatus(),
-    getSensorSettings(),
-    getSensorLabels(),
-    getSensorChartSettings(),
-  ]);
-  const sensorTypes = sensorTypesForSettings(sensorSettings, sensorChartSettings);
-  const recordEntries = await Promise.all(
-    sensorTypes.map(async (sensorType) => [
-      sensorType,
-      await getSensorSeries(sensorType, 240, undefined, { perSensorLimit: true }),
-    ] as const),
-  );
-
-  return {
-    latestStatus,
-    sensorSettings,
-    sensorLabels,
-    sensorChartSettings,
-    recordsByType: Object.fromEntries(recordEntries),
-  };
-}
-
-function latestTimestamp(timestamps: Array<string | undefined | null>) {
-  return timestamps
-    .filter((timestamp): timestamp is string => Boolean(timestamp))
-    .sort(compareBackendTimestamps)
-    .at(-1);
-}
-
-function readingForSetting(
-  setting: SensorSetting,
-  latestBySensor: Map<string, SensorRecord>,
-) {
-  const record = latestBySensor.get(setting.sensor_key);
-
-  return {
-    value: record?.value ?? setting.latest_value,
-    unit: record?.unit ?? setting.latest_unit ?? setting.unit,
-    timestamp: record?.timestamp ?? setting.latest_timestamp,
-  };
-}
-
-function buildSeriesNameByKey(settings: SensorSetting[]) {
-  return Object.fromEntries(
-    settings.map((setting) => [
-      setting.sensor_key,
-      `${formatLabelPrefix(setting.labels)}${sensorDisplayName(setting)}`,
-    ]),
+function allReadings(overview: Overview) {
+  return overview.devices.flatMap((device) =>
+    device.readings.map((reading) => ({
+      ...reading,
+      deviceId: device.device_id,
+      deviceName: device.name,
+    })),
   );
 }
 
-export function DashboardRealtime({ initialData }: DashboardRealtimeProps) {
-  const [data, setData] = useState(initialData);
-  const [lastSyncedAt, setLastSyncedAt] = useState(() => new Date());
-  const [syncError, setSyncError] = useState<string | null>(null);
+function readingKey(reading: OverviewReading) {
+  return `${reading.sensor_type}:${reading.sensor_id}`;
+}
+
+function startAt(period: PeriodKey) {
+  return new Date(Date.now() - periods[period].hours * 60 * 60 * 1000).toISOString();
+}
+
+function ageInMinutes(timestamp: string | undefined, referenceTimestamp: string) {
+  if (!timestamp) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const elapsedMilliseconds =
+    backendTimestampToMilliseconds(referenceTimestamp) -
+    backendTimestampToMilliseconds(timestamp);
+  return Math.max(0, elapsedMilliseconds / 60_000);
+}
+
+function timestampColorClass(ageMinutes: number) {
+  if (ageMinutes >= 30) {
+    return "text-[#ff8f7f]";
+  }
+  if (ageMinutes >= 15) {
+    return "text-[#f6d365]";
+  }
+  return "text-[#7cc7ff]";
+}
+
+export function DashboardRealtime({ initialOverview }: DashboardRealtimeProps) {
+  const initialReadings = allReadings(initialOverview);
+  const [overview, setOverview] = useState(initialOverview);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [period, setPeriod] = useState<PeriodKey>("24h");
+  const [selectedKey, setSelectedKey] = useState(
+    initialReadings[0] ? readingKey(initialReadings[0]) : "",
+  );
+  const [series, setSeries] = useState<SensorRecord[]>([]);
+  const [seriesLoading, setSeriesLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const trzInputRef = useRef<HTMLInputElement>(null);
+
+  const readings = useMemo(() => allReadings(overview), [overview]);
+  const selectedReading = readings.find((reading) => readingKey(reading) === selectedKey);
+  const sensorTypes = useMemo(
+    () =>
+      Array.from(
+        new Set(overview.devices.flatMap((device) => device.readings.map((item) => item.sensor_type))),
+      ).sort(compareSensorTypes),
+    [overview.devices],
+  );
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function refresh() {
+    let mounted = true;
+    async function refreshOverview() {
       try {
-        const nextData = await fetchDashboardData();
-        if (!isMounted) {
+        const next = await getOverview();
+        if (!mounted) {
           return;
         }
-        setData(nextData);
-        setLastSyncedAt(new Date());
-        setSyncError(null);
-      } catch (error) {
-        if (!isMounted) {
-          return;
+        setOverview(next);
+        const nextReadings = allReadings(next);
+        if (!nextReadings.some((reading) => readingKey(reading) === selectedKey)) {
+          setSelectedKey(nextReadings[0] ? readingKey(nextReadings[0]) : "");
         }
-        setSyncError(error instanceof Error ? error.message : "同期に失敗しました");
-      }
-    }
-
-    const intervalId = window.setInterval(refresh, refreshIntervalMs);
-
-    return () => {
-      isMounted = false;
-      window.clearInterval(intervalId);
-    };
-  }, []);
-
-  const visibleSettings = useMemo(
-    () => visibleSensorSettings(data.sensorSettings),
-    [data.sensorSettings],
-  );
-  const visibleSensorKeys = useMemo(
-    () => new Set(visibleSettings.map((setting) => setting.sensor_key)),
-    [visibleSettings],
-  );
-  const latestBySensor = useMemo(
-    () => latestRecordsBySensor(data.recordsByType),
-    [data.recordsByType],
-  );
-  const metricConfigs = useMemo(
-    () =>
-      visibleSettings.length > 0
-        ? metricConfigsForSettings(visibleSettings, data.sensorChartSettings)
-        : [],
-    [data.sensorChartSettings, visibleSettings],
-  );
-  const seriesNameByKey = useMemo(() => buildSeriesNameByKey(data.sensorSettings), [data.sensorSettings]);
-
-  const summarySettings = useMemo(
-    () => [...visibleSettings].sort(compareSensorSettings).slice(0, 6),
-    [visibleSettings],
-  );
-
-  const labelAverages = useMemo(() => {
-    const groupedSettings = new Map<string, SensorSetting[]>();
-
-    for (const setting of visibleSettings) {
-      for (const label of labelsForSetting(setting)) {
-        groupedSettings.set(label, [...(groupedSettings.get(label) ?? []), setting]);
-      }
-    }
-
-    const sensorTypes = Array.from(new Set(visibleSettings.map((setting) => setting.sensor_type)));
-
-    return Array.from(groupedSettings.entries())
-      .sort(([a], [b]) => compareLabelNames(a, b, data.sensorLabels))
-      .map(([label, settings]) => {
-        const metrics: LabelMetric[] = sensorTypes.map((sensorType) => {
-          const readings = settings
-            .filter((setting) => setting.sensor_type === sensorType)
-            .map((setting) => readingForSetting(setting, latestBySensor))
-            .filter((reading) => reading.value !== null && reading.value !== undefined);
-          const average =
-            readings.length > 0
-              ? readings.reduce((sum, reading) => sum + Number(reading.value), 0) / readings.length
-              : undefined;
-          const metric = metricConfigForType(sensorType, visibleSettings);
-          const level = alertLevelForLabels(
-            data.sensorLabels,
-            [label],
-            sensorType,
-            average,
+        setError(null);
+      } catch (refreshError) {
+        if (mounted) {
+          setError(
+            refreshError instanceof Error ? refreshError.message : "更新に失敗しました",
           );
+        }
+      }
+    }
 
-          return {
-            sensorType,
-            label: metric.label,
-            level,
-            average,
-            unit: readings[0]?.unit ?? metric.unit,
-            count: readings.length,
-            latestTimestamp: latestTimestamp(readings.map((reading) => reading.timestamp)),
-          };
+    const interval = window.setInterval(refreshOverview, 60_000);
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, [selectedKey]);
+
+  useEffect(() => {
+    if (!selectedReading) {
+      setSeries([]);
+      return;
+    }
+    const activeReading = selectedReading;
+
+    let mounted = true;
+    async function refreshSeries() {
+      setSeriesLoading(true);
+      try {
+        const records = await getSensorSeries(activeReading.sensor_type, {
+          sensorId: activeReading.sensor_id,
+          startAt: startAt(period),
         });
+        if (mounted) {
+          setSeries(records);
+          setError(null);
+        }
+      } catch (fetchError) {
+        if (mounted) {
+          setError(
+            fetchError instanceof Error ? fetchError.message : "グラフ取得に失敗しました",
+          );
+        }
+      } finally {
+        if (mounted) {
+          setSeriesLoading(false);
+        }
+      }
+    }
 
-        return { label, settings, metrics };
-      });
-  }, [data.sensorLabels, latestBySensor, visibleSettings]);
+    void refreshSeries();
+    const interval = window.setInterval(refreshSeries, 60_000);
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, [period, selectedKey, selectedReading]);
 
-  const recordsByVisibleType = useMemo(() => {
-    const entries = Object.entries(data.recordsByType).map(([sensorType, records]) => [
-      sensorType,
-      records.filter((record) => {
-        return visibleSensorKeys.has(sensorKeyFromRecord(record));
-      }),
-    ] as const);
+  async function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await document.documentElement.requestFullscreen();
+    }
+  }
 
-    return Object.fromEntries(entries);
-  }, [data.recordsByType, visibleSensorKeys]);
+  async function handleTrzSelection(files: FileList | null) {
+    if (!files?.length) {
+      return;
+    }
+
+    setImporting(true);
+    setImportMessage(null);
+    setError(null);
+    try {
+      const result = await importTrzFiles(Array.from(files));
+      const nextOverview = await getOverview();
+      setOverview(nextOverview);
+      setImportMessage(
+        `${result.files.length}ファイルを取り込みました（新規 ${result.inserted_count}件、重複 ${result.skipped_duplicate_count}件）`,
+      );
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "TRZの取り込みに失敗しました");
+    } finally {
+      setImporting(false);
+      if (trzInputRef.current) {
+        trzInputRef.current.value = "";
+      }
+    }
+  }
 
   return (
-    <div className="space-y-8">
-      <section className="dashboard-first-view space-y-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <h1 className="dashboard-section-title text-[24px] sm:text-[28px]">
-            栽培環境モニタリング
-          </h1>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-[#9cadbf]">
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-              最終同期 {formatJapanDateTime(lastSyncedAt.toISOString(), { seconds: true })}
-            </span>
-            {syncError ? (
-              <span className="rounded-full border border-[#fa6138]/30 bg-[#fa6138]/10 px-3 py-1 text-[#ffb39f]">
-                同期エラー
-              </span>
-            ) : null}
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-              表示 {visibleSettings.length} センサー
-            </span>
-          </div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-12">
-          <div className="lg:col-span-7">
-            {summarySettings.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {summarySettings.map((setting, index) => {
-                  const reading = readingForSetting(setting, latestBySensor);
-                  const metric = metricConfigForType(setting.sensor_type, data.sensorSettings, index);
-
-                  return (
-                    <StatusCard
-                      key={setting.sensor_key}
-                      label={sensorDisplayName(setting)}
-                      value={formatMetricValue(reading.value, reading.unit, metric.digits)}
-                      meta={`${metric.label} / ${formatJapanDateTime(reading.timestamp ?? undefined, { seconds: true })}`}
-                      accent={accentCycle[index % accentCycle.length]}
-                      compact
-                    />
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="dashboard-card rounded-[8px] p-5 text-sm text-[#9cadbf]">
-                表示対象のセンサーがありません。
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-4 lg:col-span-5">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div>
-                <h2 className="dashboard-section-title mb-3 text-[20px]">カメラ1</h2>
-                <LatestImages images={data.latestStatus.latest_images.slice(0, 1)} compact />
-              </div>
-              <div>
-                <h2 className="dashboard-section-title mb-3 text-[20px]">カメラ2</h2>
-                <LatestImages images={data.latestStatus.latest_images.slice(1, 2)} compact />
-              </div>
+    <div className="space-y-6">
+      <header className="dashboard-card rounded-[8px] p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  overview.status.state === "online" ? "bg-[#9fd8cb]" : "bg-[#f8c471]"
+                }`}
+              />
+              <h1 className="dashboard-section-title text-[26px]">栽培状況</h1>
             </div>
-          </div>
-        </div>
-
-        <div className="dashboard-card rounded-[8px] p-4">
-          <div className="mb-4 flex flex-col gap-2 border-b border-white/10 pb-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="dashboard-section-title text-[20px]">ラベル別 最新平均</h2>
-              <p className="mt-1 text-sm text-[#9cadbf]">
-                設定済みラベルごとに、表示中センサーの最新値を項目別にまとめます。
-              </p>
-            </div>
-            <Link href="/settings" className="text-sm font-medium text-white underline-offset-4 hover:underline">
-              設定を開く
-            </Link>
-          </div>
-
-          {labelAverages.length > 0 ? (
-            <div className="grid gap-3 lg:grid-cols-3">
-              {labelAverages.map((area) => (
-                <article key={area.label} className="rounded-[8px] border border-white/10 bg-white/[0.03] p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-base font-semibold text-white">{area.label}</h3>
-                      <p className="mt-1 text-xs text-[#9cadbf]">
-                        {area.settings.map(sensorDisplayName).join(" / ")}
-                      </p>
-                    </div>
-                    <span className="shrink-0 rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-[#9cadbf]">
-                      {area.settings.length}センサー
-                    </span>
-                  </div>
-                  <div className="mt-3 grid gap-2">
-                    {area.metrics.map((metric) => (
-                      <div key={metric.sensorType} className="flex items-start justify-between gap-3 text-sm">
-                        <span className="text-[#9cadbf]">{metric.label}</span>
-                        <span className={`text-right font-semibold ${alertTextClass(metric.level)}`}>
-                          {formatMetricValue(metric.average, metric.unit)}
-                          <span className="ml-2 text-xs font-normal text-[#9cadbf]">n={metric.count}</span>
-                          <span className="block text-[11px] font-normal text-[#9cadbf]">
-                            {formatJapanDateTime(metric.latestTimestamp, { seconds: true })}
-                          </span>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-[#9cadbf]">
-              ラベルが設定された表示中センサーはまだありません。
+            <p className="mt-2 text-sm text-[#9cadbf]">
+              最終取得{" "}
+              {formatJapanDateTime(overview.status.last_sensor_at ?? undefined, {
+                seconds: true,
+              })}
+              {" / "}
+              {overview.status.state === "online" ? "正常" : "更新停止"}
             </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <input
+              ref={trzInputRef}
+              type="file"
+              accept=".trz"
+              multiple
+              className="hidden"
+              onChange={(event) => void handleTrzSelection(event.target.files)}
+            />
+            <button
+              type="button"
+              onClick={() => trzInputRef.current?.click()}
+              disabled={importing}
+              className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-medium text-white"
+            >
+              {importing ? "取込中..." : "TRZ取込"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setExportOpen(true)}
+              className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-medium text-white"
+            >
+              CSV出力
+            </button>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-medium text-white"
+            >
+              全画面
+            </button>
+          </div>
+        </div>
+        {error ? <p className="mt-3 text-sm text-[#ffb39f]">{error}</p> : null}
+        {importMessage ? <p className="mt-3 text-sm text-[#9fd8cb]">{importMessage}</p> : null}
+      </header>
+
+      <section className="dashboard-card overflow-x-auto rounded-[8px] p-4">
+        <div className="mb-4">
+          <h2 className="dashboard-section-title text-[20px]">センサー現在値</h2>
+        </div>
+        {overview.devices.length > 0 ? (
+          <table className="w-full min-w-[640px] border-collapse text-left">
+            <thead>
+              <tr className="border-b border-white/10 text-xs text-[#9cadbf]">
+                <th className="px-3 py-3 font-medium">機器</th>
+                {sensorTypes.map((sensorType) => (
+                  <th key={sensorType} className="px-3 py-3 font-medium">
+                    {metricConfigForType(sensorType).label}
+                  </th>
+                ))}
+                <th className="px-3 py-3 font-medium">更新</th>
+              </tr>
+            </thead>
+            <tbody>
+              {overview.devices.map((device) => {
+                const latestTimestamp = device.readings
+                  .map((reading) => reading.timestamp)
+                  .sort()
+                  .at(-1);
+                const latestAgeMinutes = ageInMinutes(
+                  latestTimestamp,
+                  overview.status.checked_at,
+                );
+                return (
+                  <tr key={device.device_id} className="border-b border-white/5">
+                    <td className="px-3 py-4">
+                      <p className="font-semibold text-white">{device.name}</p>
+                      <p className="mt-1 text-xs text-[#9cadbf]">{device.device_id}</p>
+                    </td>
+                    {sensorTypes.map((sensorType) => {
+                      const reading = device.readings.find(
+                        (item) => item.sensor_type === sensorType,
+                      );
+                      const readingAgeMinutes = ageInMinutes(
+                        reading?.timestamp,
+                        overview.status.checked_at,
+                      );
+                      return (
+                        <td
+                          key={sensorType}
+                          className={`px-3 py-4 text-lg font-semibold ${
+                            !reading
+                              ? "text-[#68727d]"
+                              : readingAgeMinutes >= 30
+                                ? "text-white/35"
+                                : "text-white"
+                          }`}
+                        >
+                          {formatMetricValue(reading?.value, reading?.unit)}
+                        </td>
+                      );
+                    })}
+                    <td
+                      className={`px-3 py-4 text-xs font-medium ${timestampColorClass(
+                        latestAgeMinutes,
+                      )}`}
+                    >
+                      {formatJapanDateTime(latestTimestamp, { seconds: true })}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <p className="text-sm text-[#9cadbf]">センサーデータはまだありません。</p>
+        )}
+      </section>
+
+      <section>
+        <h2 className="dashboard-section-title mb-4 text-[20px]">最新画像</h2>
+        <LatestImages images={overview.latest_images} />
+      </section>
+
+      <section className="dashboard-card rounded-[8px] p-4">
+        <div className="flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="dashboard-section-title text-[20px]">推移</h2>
+            <p className="mt-1 text-sm text-[#9cadbf]">表示する機器と項目を選択します。</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={selectedKey}
+              onChange={(event) => setSelectedKey(event.target.value)}
+              className="rounded-[8px] border border-white/10 bg-[#1f2123] px-3 py-2 text-sm text-white"
+            >
+              {readings.map((reading) => (
+                <option key={readingKey(reading)} value={readingKey(reading)}>
+                  {reading.deviceName} / {metricConfigForType(reading.sensor_type).label}
+                </option>
+              ))}
+            </select>
+            {(Object.keys(periods) as PeriodKey[]).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setPeriod(key)}
+                className={`rounded-full px-3 py-2 text-sm ${
+                  period === key
+                    ? "bg-white text-[#1f2123]"
+                    : "border border-white/10 bg-white/5 text-white"
+                }`}
+              >
+                {periods[key].label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="pt-4">
+          {seriesLoading && series.length === 0 ? (
+            <div className="flex h-[280px] items-center justify-center text-sm text-[#9cadbf]">
+              読み込み中...
+            </div>
+          ) : series.length > 0 && selectedReading ? (
+            <SensorLineChart
+              records={series}
+              unit={selectedReading.unit}
+              color={metricConfigForType(selectedReading.sensor_type).color}
+              seriesNameByKey={{
+                [`ondotori:${selectedReading.sensor_type}:${selectedReading.sensor_id}`]:
+                  selectedReading.deviceName,
+              }}
+            />
+          ) : (
+            <div className="flex h-[280px] items-center justify-center text-sm text-[#9cadbf]">
+              表示できるデータがありません。
+            </div>
           )}
         </div>
       </section>
 
-      <section className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="dashboard-section-title text-[22px]">センサー別 最新値</h2>
-            <p className="mt-2 text-sm text-[#9cadbf]">
-              データ取得元に関係なく、設定済みの表示名とラベルで並べます。
-            </p>
-          </div>
-          <Link href="/monitor" className="text-sm font-medium text-white underline-offset-4 hover:underline">
-            モニターを開く
-          </Link>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-3">
-          {visibleSettings.map((setting) => {
-            const reading = readingForSetting(setting, latestBySensor);
-            const metric = metricConfigForType(setting.sensor_type, data.sensorSettings);
-
-            const level = alertLevelForLabels(
-              data.sensorLabels,
-              setting.labels,
-              setting.sensor_type,
-              reading.value,
-            );
-
-            return (
-              <article key={setting.sensor_key} className={`dashboard-card rounded-[8px] p-4 ${alertBorderClass(level)}`}>
-                <div className="border-b border-white/10 pb-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9cadbf]">
-                    {metric.label}
-                  </p>
-                  <h3 className="mt-2 text-xl font-semibold text-white">{sensorDisplayName(setting)}</h3>
-                  <p className="mt-1 text-sm text-[#9cadbf]">{setting.location}</p>
-                  {setting.labels.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {setting.labels.map((label) => (
-                        <span
-                          key={label}
-                          className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-[#d7e1eb]"
-                        >
-                          {label}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="mt-4 rounded-[8px] border border-white/10 bg-white/[0.03] p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-medium text-[#9cadbf]">Latest</p>
-                      <p className={`mt-1 text-lg font-semibold ${alertTextClass(level)}`}>
-                        {formatMetricValue(reading.value, reading.unit, metric.digits)}
-                      </p>
-                    </div>
-                    <span className="shrink-0 rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-[#9cadbf]">
-                      {formatJapanDateTime(reading.timestamp ?? undefined, { seconds: true })}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-[#9cadbf]">
-                    {setting.source} / {setting.sensor_id}
-                  </p>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </section>
-
-      <section id="timeseries" className="space-y-8">
-        <div>
-          <h2 className="dashboard-section-title text-[22px]">時系列</h2>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-2">
-          {metricConfigs.map((metric) => {
-            const records = recordsByVisibleType[metric.key] ?? [];
-            const unit =
-              metric.unit ||
-              records[0]?.unit ||
-              visibleSettings.find((setting) => setting.sensor_type === metric.key)?.unit ||
-              "";
-
-            if (records.length === 0) {
-              return null;
+      {exportOpen ? (
+        <div
+          role="presentation"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setExportOpen(false);
             }
-
-            return (
-              <SectionCard
-                key={metric.key}
-                eyebrow={metric.key}
-                title={metric.label}
-                description="表示中センサーの保存済みデータを表示します。"
-              >
-                <SensorLineChart
-                  records={records}
-                  unit={unit}
-                  color={metric.color}
-                  seriesNameByKey={seriesNameByKey}
-                />
-              </SectionCard>
-            );
-          })}
-
-          <SectionCard
-            eyebrow="Connection"
-            title="接続状況"
-            description="backend から取得した現在の接続状態です。"
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[12px] bg-[#f4f1e8] p-5 text-[#1f2123] shadow-2xl"
           >
-            <div className="space-y-4">
-              <div className="dashboard-card rounded-[8px] p-4">
-                <p className="text-sm font-medium text-white/70">System Status</p>
-                <p className="mt-2 text-[30px] font-semibold text-white">
-                  {data.latestStatus.connection_status.overall_status.toUpperCase()}
-                </p>
-                <p className="mt-2 text-sm text-[#9cadbf]">
-                  {syncError ?? data.latestStatus.connection_status.detail}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <Link
-                  href="/settings"
-                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
-                >
-                  設定
-                </Link>
-                <Link
-                  href="/manual-input"
-                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
-                >
-                  データ入力
-                </Link>
-                <Link
-                  href="/export"
-                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
-                >
-                  CSV 出力
-                </Link>
-              </div>
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <h2 className="text-xl font-semibold">センサーデータ出力</h2>
+              <button
+                type="button"
+                onClick={() => setExportOpen(false)}
+                className="rounded-full border border-black/10 px-3 py-1.5 text-sm"
+              >
+                閉じる
+              </button>
             </div>
-          </SectionCard>
+            <ExportForm />
+          </section>
         </div>
-      </section>
+      ) : null}
     </div>
   );
 }

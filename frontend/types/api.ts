@@ -10,78 +10,30 @@ export type SensorRecord = {
   note: string | null;
 };
 
-export type SensorSetting = {
-  id: number | null;
-  sensor_key: string;
+export type OverviewReading = {
   sensor_type: string;
   sensor_id: string;
-  source: string;
-  location: string;
-  unit: string;
-  display_name: string | null;
-  effective_name: string;
-  labels: string[];
-  is_visible: boolean;
-  display_order: number;
-  latest_timestamp: string | null;
-  latest_value: number | null;
-  latest_unit: string | null;
-};
-
-export type SensorSettingUpdate = {
-  display_name: string | null;
-  labels: string[];
-  is_visible: boolean;
-  display_order: number;
-};
-
-export type SensorLabelThreshold = {
-  sensor_type: string;
-  warning_min: number | null;
-  warning_max: number | null;
-  critical_min: number | null;
-  critical_max: number | null;
-};
-
-export type SensorLabel = {
-  id: number;
-  name: string;
-  color: string;
-  display_order: number;
-  thresholds: SensorLabelThreshold[];
-};
-
-export type SensorLabelInput = {
-  name: string;
-  color: string;
-  display_order: number;
-  thresholds: SensorLabelThreshold[];
-};
-
-export type SensorChartSetting = {
-  id: number | null;
-  sensor_type: string;
-  y_axis_min: number | null;
-  y_axis_max: number | null;
-  display_order: number;
-};
-
-export type SensorChartSettingInput = {
-  sensor_type: string;
-  y_axis_min: number | null;
-  y_axis_max: number | null;
-  display_order: number;
-};
-
-export type ManualRecord = {
-  id: number;
-  timestamp: string;
-  item_type: string;
-  location: string;
   value: number;
   unit: string;
-  input_by: string;
-  note: string | null;
+  timestamp: string;
+};
+
+export type OverviewDevice = {
+  device_id: string;
+  name: string;
+  location: string;
+  readings: OverviewReading[];
+};
+
+export type Overview = {
+  devices: OverviewDevice[];
+  latest_images: ImageRecord[];
+  status: {
+    state: "online" | "stale";
+    checked_at: string;
+    last_sensor_at: string | null;
+    detail: string;
+  };
 };
 
 export type ImageRecord = {
@@ -94,16 +46,18 @@ export type ImageRecord = {
   public_url: string;
 };
 
-export type LatestStatus = {
-  latest_temperature: SensorRecord | null;
-  latest_humidity: SensorRecord | null;
-  latest_co2: SensorRecord | null;
-  latest_tank_level: SensorRecord | null;
-  connection_status: {
-    overall_status: string;
-    checked_at: string;
-    source: string;
-    detail: string;
-  };
-  latest_images: ImageRecord[];
+export type TrzImportResponse = {
+  files: {
+    filename: string;
+    parsed_count: number;
+    inserted_count: number;
+    skipped_duplicate_count: number;
+    skipped_invalid_count: number;
+    devices: string[];
+    started_at: string | null;
+    ended_at: string | null;
+  }[];
+  inserted_count: number;
+  skipped_duplicate_count: number;
+  skipped_invalid_count: number;
 };

@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.config import get_settings
 from backend.app.models.image_record import ImageRecord
-from backend.app.models.manual_record import ManualRecord
 from backend.app.models.sensor_record import SensorRecord
 
 
@@ -17,7 +16,6 @@ def seed_dummy_data(db: Session, reset: bool = False) -> None:
     if reset:
         db.execute(delete(SensorRecord))
         db.execute(delete(ImageRecord))
-        db.execute(delete(ManualRecord))
         db.commit()
 
     if db.query(SensorRecord).first():
@@ -94,21 +92,8 @@ def seed_dummy_data(db: Session, reset: bool = False) -> None:
         ),
     ]
 
-    manual_records = [
-        ManualRecord(
-            timestamp=now - timedelta(hours=2),
-            item_type="leaf_length",
-            location="growth-chamber-a",
-            value=12.4,
-            unit="cm",
-            input_by="local-dev",
-            note="Initial manual sample",
-        )
-    ]
-
     db.add_all(sensor_records)
     db.add_all(image_records)
-    db.add_all(manual_records)
     db.commit()
 
 

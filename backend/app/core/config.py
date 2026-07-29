@@ -10,7 +10,6 @@ class Settings(BaseSettings):
     image_storage_path: str = "storage/images"
     export_storage_path: str = "storage/exports"
     incoming_image_path: str = "storage/incoming"
-    sensor_input_json_path: str = "storage/runtime/sensor_readings.json"
     runtime_text_log_path: str = "storage/runtime/runtime.log"
     sensor_record_log_path: str = "storage/runtime/sensor_records.jsonl"
     ondotori_api_log_path: str = "storage/runtime/ondotori_current.jsonl"
@@ -19,10 +18,7 @@ class Settings(BaseSettings):
     frontend_port: int = 3000
     frontend_allowed_origins: str = ""
     backend_port: int = 8000
-    sensor_source_type: str = "dummy"
     camera_source_type: str = "dummy"
-    sensor_command: str = ""
-    sensor_command_timeout_seconds: int = 30
     ondotori_api_key: str = ""
     ondotori_login_id: str = ""
     ondotori_login_pass: str = ""
@@ -30,8 +26,6 @@ class Settings(BaseSettings):
     ondotori_remote_serials_csv: str = ""
     ondotori_base_serials_csv: str = ""
     ondotori_timeout_seconds: int = 30
-    ds18b20_device_glob: str = "/sys/bus/w1/devices/28-*/w1_slave"
-    ds18b20_location_prefix: str = "water-probe"
     camera_command: str = ""
     camera_command_timeout_seconds: int = 30
     camera_capture_timeout_ms: int = 1000
@@ -75,10 +69,6 @@ class Settings(BaseSettings):
         return (self.project_root / self.incoming_image_path).resolve()
 
     @property
-    def resolved_sensor_input_json_path(self) -> Path:
-        return (self.project_root / self.sensor_input_json_path).resolve()
-
-    @property
     def resolved_runtime_text_log_path(self) -> Path:
         return (self.project_root / self.runtime_text_log_path).resolve()
 
@@ -118,7 +108,6 @@ class Settings(BaseSettings):
         self.resolved_image_storage_path.mkdir(parents=True, exist_ok=True)
         self.resolved_export_storage_path.mkdir(parents=True, exist_ok=True)
         self.resolved_incoming_image_path.mkdir(parents=True, exist_ok=True)
-        self.resolved_sensor_input_json_path.parent.mkdir(parents=True, exist_ok=True)
         self.resolved_runtime_text_log_path.parent.mkdir(parents=True, exist_ok=True)
         self.resolved_sensor_record_log_path.parent.mkdir(parents=True, exist_ok=True)
         self.resolved_ondotori_api_log_path.parent.mkdir(parents=True, exist_ok=True)

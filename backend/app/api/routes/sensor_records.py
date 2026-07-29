@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db
 from backend.app.models.sensor_record import SensorRecord
-from backend.app.schemas.sensor_record import SensorRecordCreate, SensorRecordRead
+from backend.app.schemas.sensor_record import SensorRecordRead
 
 router = APIRouter()
 
@@ -14,6 +14,7 @@ router = APIRouter()
 @router.get("", response_model=list[SensorRecordRead])
 def list_sensor_records(
     sensor_type: str | None = None,
+    sensor_id: str | None = None,
     source: str | None = None,
     start_at: datetime | None = None,
     end_at: datetime | None = None,
@@ -25,6 +26,8 @@ def list_sensor_records(
 
     if sensor_type:
         filters.append(SensorRecord.sensor_type == sensor_type)
+    if sensor_id:
+        filters.append(SensorRecord.sensor_id == sensor_id)
     if source:
         filters.append(SensorRecord.source == source)
     if start_at:
@@ -61,15 +64,3 @@ def list_sensor_records(
     )
 
     return list(db.scalars(statement).all())
-
-
-@router.post("", response_model=SensorRecordRead, status_code=201)
-def create_sensor_record(
-    payload: SensorRecordCreate,
-    db: Session = Depends(get_db),
-) -> SensorRecord:
-    record = SensorRecord(**payload.model_dump())
-    db.add(record)
-    db.commit()
-    db.refresh(record)
-    return record

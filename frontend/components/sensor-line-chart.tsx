@@ -19,6 +19,8 @@ type SensorLineChartProps = {
   unit: string;
   color: string;
   seriesNameByKey?: Record<string, string>;
+  yAxisMin?: number | null;
+  yAxisMax?: number | null;
 };
 
 export function SensorLineChart({
@@ -26,6 +28,8 @@ export function SensorLineChart({
   unit,
   color,
   seriesNameByKey = {},
+  yAxisMin = null,
+  yAxisMax = null,
 }: SensorLineChartProps) {
   const seriesKeys = Array.from(new Set(records.map(sensorKeyFromRecord)));
   const colors = [color, "#9fd8cb", "#f8c471", "#d7b7ff", "#f4a7a1", "#a7d8ff"];
@@ -58,7 +62,7 @@ export function SensorLineChart({
             tick={{ fill: "#9cadbf", fontSize: 12 }}
             tickLine={false}
             axisLine={false}
-            domain={["dataMin - 1", "dataMax + 1"]}
+            domain={[yAxisMin ?? "dataMin - 1", yAxisMax ?? "dataMax + 1"]}
             unit={unit}
           />
           <Tooltip

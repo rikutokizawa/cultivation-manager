@@ -2,38 +2,24 @@
 
 研究室内ネットワーク向けの栽培管理・栽培データ収集システムです。
 
-センサー値、手入力記録、画像記録をバックエンドで保存し、Next.js の画面でダッシュボード、常時モニター、設定、手入力、エクスポートを扱います。
+センサー値と画像記録をバックエンドで保存し、1画面のDashboardで現在値、画像、推移、TRZ取込、CSV出力を扱います。
 
 ## 現在できること
 
 - FastAPI + SQLite によるデータ保存
 - センサー記録の保存、一覧取得、期間指定取得
-- 手入力記録の登録、一覧表示
-- 画像記録の保存、アップロード、静的配信
+- 画像記録の保存、静的配信
 - CSV エクスポート
-- ダッシュボード表示
-  - センサー別最新値
-  - ラベル別最新平均
-  - 時系列グラフ
-  - カメラ画像
-- 常時モニター表示
-  - モニター1: ラベル別平均値 + グラフ
-  - モニター2: グラフなしのラベル別最新平均
-  - 1h / 6h / 24h / 7d の期間切替
-- 設定画面
-  - センサーの表示/非表示
-  - 表示名
-  - ラベル割り当て
-  - 表示順
-  - ラベルの追加/削除
-  - ラベルごとの warning / critical 閾値
-  - モニターグラフのY軸下限/上限
-- 複数センサー取得 source
-  - dummy
-  - json
-  - command
-  - onewire
-  - ondotori
+- 1画面Dashboard
+  - おんどとり機器別の最新値一覧
+  - USBカメラ2台分の最新画像枠
+  - 選択した機器・項目の時系列グラフ
+  - 6h / 24h / 7d の期間切替
+  - TRZファイル取込
+  - CSV出力ダイアログ
+  - 全画面表示
+- おんどとり現在値APIからのセンサー取得
+- おんどとりTRZ履歴データの取り込み
 - カメラ source
   - dummy
   - directory
@@ -80,24 +66,21 @@ DATABASE_URL=sqlite:///./storage/cultivation.db
 IMAGE_STORAGE_PATH=storage/images
 EXPORT_STORAGE_PATH=storage/exports
 INCOMING_IMAGE_PATH=storage/incoming
-SENSOR_INPUT_JSON_PATH=storage/runtime/sensor_readings.json
 RUNTIME_TEXT_LOG_PATH=storage/runtime/runtime.log
 SENSOR_RECORD_LOG_PATH=storage/runtime/sensor_records.jsonl
 ONDOTORI_API_LOG_PATH=storage/runtime/ondotori_current.jsonl
 
 BACKEND_BASE_URL=http://localhost:8000
 FRONTEND_ALLOWED_ORIGINS=
-SENSOR_SOURCE_TYPE=dummy
 CAMERA_SOURCE_TYPE=dummy
 SENSOR_POLL_INTERVAL_SECONDS=300
 IMAGE_CAPTURE_INTERVAL_SECONDS=900
 CAMERA_IDS_CSV=camera-01,camera-02
 ```
 
-おんどとりを使う場合:
+おんどとり接続設定:
 
 ```text
-SENSOR_SOURCE_TYPE=ondotori
 ONDOTORI_API_KEY=
 ONDOTORI_LOGIN_ID=
 ONDOTORI_LOGIN_PASS=
@@ -134,7 +117,9 @@ pnpm dev
 
 ### おんどとりTRZデータ取り込み
 
-ダウンロードした `.trz` を取り込み待ちフォルダへ置いてから実行します。
+Dashboardの「TRZ取込」から、ダウンロードした `.trz` を直接選択できます。複数ファイルの一括選択にも対応し、既に保存済みの測定値は重複登録しません。
+
+コマンドで取り込む場合は、`.trz` を取り込み待ちフォルダへ置いてから実行します。
 
 ```bash
 cp /path/to/*.trz storage/ondotori_imports/
@@ -215,64 +200,18 @@ pnpm start
 ## 画面
 
 ```text
-Dashboard     http://localhost:3000/
-Monitor       http://localhost:3000/monitor
-Settings      http://localhost:3000/settings
-Manual Input  http://localhost:3000/manual-input
-Export        http://localhost:3000/export
+Dashboard  http://localhost:3000/
 ```
 
 ### Dashboard
 
 全体状況を見る画面です。
 
-- 表示中センサーの最新値
-- ラベル別最新平均
-- センサー別最新値
-- 時系列グラフ
-- カメラ画像
-- 接続状況
-
-### Monitor
-
-常時表示向けの画面です。
-
-- モニター1
-  - 左側にラベル別平均値
-  - 右側にグラフ
-  - 期間は `1h / 6h / 24h / 7d`
-- モニター2
-  - グラフなし
-  - ラベルごとの最新平均カードを一覧表示
-
-### Settings
-
-運用上の表示設定を管理します。
-
-- センサー設定
-  - 表示/非表示
-  - 表示名
-  - ラベル割り当て
-  - 表示順
-- ラベル管理
-  - ラベル追加/削除
-  - 色
-  - 表示順
-  - warning / critical 閾値
-- グラフ範囲
-  - センサー種別ごとのY軸下限/上限
-  - 空欄の場合は自動調整
-
-warning / critical 閾値:
-
-```text
-warning_min   この値より低いと注意
-warning_max   この値より高いと注意
-critical_min  この値より低いと異常
-critical_max  この値より高いと異常
-```
-
-不要な条件は空欄にできます。
+- おんどとり機器別の現在値
+- カメラ1・カメラ2の最新画像
+- 選択した1項目の時系列グラフ
+- 最終取得時刻と更新状態
+- TRZ取込、CSV出力、全画面表示
 
 ## Backend スクリプト
 
@@ -285,58 +224,18 @@ critical_max  この値より高いと異常
 ### センサー収集を1回実行
 
 ```bash
-.venv/bin/python -m backend.scripts.collect_sensor_data --source dummy
-```
-
-利用できる source:
-
-```text
-dummy
-json
-command
-onewire
-ondotori
-```
-
-カンマ区切りで併用できます。
-
-```bash
-.venv/bin/python -m backend.scripts.collect_sensor_data --source dummy,onewire
+.venv/bin/python -m backend.scripts.collect_sensor_data
 ```
 
 ### センサー収集を継続実行
 
 ```bash
-.venv/bin/python -m backend.scripts.collect_sensor_data --source ondotori --loop --interval 60
+.venv/bin/python -m backend.scripts.collect_sensor_data --loop --interval 60
 ```
 
 おんどとり現在値APIのレートリミットは 10回/120秒 です。開発中も短すぎる interval は避けてください。
 
-### JSON source
-
-`.env` の `SENSOR_INPUT_JSON_PATH` にある JSON を読みます。
-
-```bash
-.venv/bin/python -m backend.scripts.collect_sensor_data --source json
-```
-
-### command source
-
-`SENSOR_COMMAND` の標準出力 JSON を読みます。
-
-疎通確認用:
-
-```bash
-.venv/bin/python -m backend.scripts.emit_sample_sensor_json
-```
-
-### one-wire source
-
-`DS18B20_DEVICE_GLOB` に一致する one-wire 温度センサーを読みます。
-
-```bash
-.venv/bin/python -m backend.scripts.collect_sensor_data --source onewire
-```
+通常取得はおんどとり現在値APIに固定されています。取得できなかった期間の履歴は、ダウンロードしたTRZファイルを `backend.scripts.import_ondotori_trz` で取り込みます。
 
 ### 画像取り込みを1回実行
 
@@ -367,7 +266,7 @@ rpi
 .venv/bin/python -m backend.scripts.check_runtime_environment
 ```
 
-Pi 上で one-wire パス、カメラコマンド、必要ディレクトリなどを確認します。
+Pi 上でカメラコマンドや必要ディレクトリなどを確認します。
 
 ## API
 
@@ -375,29 +274,10 @@ Pi 上で one-wire パス、カメラコマンド、必要ディレクトリな�
 
 ```text
 GET  /health
-GET  /latest-status
-GET  /dashboard/summary
-
+GET  /overview
 GET  /sensor-records
-POST /sensor-records
-
-GET  /sensor-settings
-PUT  /sensor-settings/{sensor_key}
-
-GET  /sensor-labels
-POST /sensor-labels
-PUT  /sensor-labels/{label_id}
-DELETE /sensor-labels/{label_id}
-
-GET  /sensor-chart-settings
-PUT  /sensor-chart-settings/{sensor_type}
-
-GET  /manual-records
-POST /manual-records
-
+POST /import-trz
 GET  /image-records
-POST /upload-image
-
 GET  /export/sensor-records.csv
 ```
 
@@ -405,21 +285,9 @@ GET  /export/sensor-records.csv
 
 ```bash
 curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/overview
 curl 'http://127.0.0.1:8000/sensor-records?limit=3'
 curl 'http://127.0.0.1:8000/sensor-records?sensor_type=temperature&limit=20'
-curl http://127.0.0.1:8000/sensor-settings
-curl http://127.0.0.1:8000/sensor-labels
-curl http://127.0.0.1:8000/sensor-chart-settings
-curl http://127.0.0.1:8000/latest-status
-```
-
-画像アップロード例:
-
-```bash
-curl -X POST http://127.0.0.1:8000/upload-image \
-  -F camera_id=camera-upload-01 \
-  -F location=growth-chamber-upload \
-  -F file=@storage/images/camera-01-latest.svg
 ```
 
 ## ログ
@@ -518,9 +386,10 @@ Pi へ持っていく時点で揃っているもの:
 - SQLite 保存
 - 定期センサー収集
 - 定期画像取り込み
-- dummy / json / command / onewire / ondotori source
+- おんどとり現在値APIからの定期取得
+- おんどとりTRZ履歴データの取り込み
 - dummy / directory / rpi camera source
-- upload-image API
+- カメラ2台分の最新画像表示
 - CSV export
 - systemd テンプレート
 
@@ -531,7 +400,7 @@ systemd テンプレート:
 
 Pi 側で調整するもの:
 
-- `.env` の保存先、ポート、interval、source種別
+- `.env` の保存先、ポート、取得間隔、カメラ設定
 - 実センサーの接続・読み取り設定
 - 実カメラの接続・撮影設定
 - systemd の `WorkingDirectory` / `EnvironmentFile` / 実行ユーザー

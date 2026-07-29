@@ -53,6 +53,7 @@ export function ExportForm() {
           >
             <option value="temperature">temperature</option>
             <option value="humidity">humidity</option>
+            <option value="co2">co2</option>
           </select>
         </label>
       </div>
@@ -70,4 +71,3 @@ export function ExportForm() {
     </div>
   );
 }
-

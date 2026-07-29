@@ -3,8 +3,12 @@ function parseBackendTimestamp(value: string) {
   return new Date(hasTimezone ? value : `${value}Z`);
 }
 
+export function backendTimestampToMilliseconds(value: string) {
+  return parseBackendTimestamp(value).getTime();
+}
+
 export function compareBackendTimestamps(a: string, b: string) {
-  return parseBackendTimestamp(a).getTime() - parseBackendTimestamp(b).getTime();
+  return backendTimestampToMilliseconds(a) - backendTimestampToMilliseconds(b);
 }
 
 export function formatJapanDateTime(value: string | undefined, options?: { seconds?: boolean }) {
