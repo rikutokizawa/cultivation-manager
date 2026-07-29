@@ -261,7 +261,8 @@ export function DashboardRealtime({ initialOverview }: DashboardRealtimeProps) {
         {importMessage ? <p className="mt-3 text-sm text-[#9fd8cb]">{importMessage}</p> : null}
       </header>
 
-      <section className="dashboard-card overflow-x-auto rounded-[8px] p-4">
+      <div className="grid items-start gap-6 2xl:grid-cols-[minmax(640px,0.9fr)_minmax(0,1.1fr)]">
+        <section className="dashboard-card overflow-x-auto rounded-[8px] p-4">
         <div className="mb-4">
           <h2 className="dashboard-section-title text-[20px]">センサー現在値</h2>
         </div>
@@ -334,69 +335,72 @@ export function DashboardRealtime({ initialOverview }: DashboardRealtimeProps) {
         ) : (
           <p className="text-sm text-[#9cadbf]">センサーデータはまだありません。</p>
         )}
-      </section>
+        </section>
 
-      <section>
-        <h2 className="dashboard-section-title mb-4 text-[20px]">最新画像</h2>
-        <LatestImages images={overview.latest_images} />
-      </section>
+        <div className="space-y-6">
+          <section>
+            <h2 className="dashboard-section-title mb-4 text-[20px]">最新画像</h2>
+            <LatestImages images={overview.latest_images} />
+          </section>
 
-      <section className="dashboard-card rounded-[8px] p-4">
-        <div className="flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h2 className="dashboard-section-title text-[20px]">推移</h2>
-            <p className="mt-1 text-sm text-[#9cadbf]">表示する機器と項目を選択します。</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={selectedKey}
-              onChange={(event) => setSelectedKey(event.target.value)}
-              className="rounded-[8px] border border-white/10 bg-[#1f2123] px-3 py-2 text-sm text-white"
-            >
-              {readings.map((reading) => (
-                <option key={readingKey(reading)} value={readingKey(reading)}>
-                  {reading.deviceName} / {metricConfigForType(reading.sensor_type).label}
-                </option>
-              ))}
-            </select>
-            {(Object.keys(periods) as PeriodKey[]).map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setPeriod(key)}
-                className={`rounded-full px-3 py-2 text-sm ${
-                  period === key
-                    ? "bg-white text-[#1f2123]"
-                    : "border border-white/10 bg-white/5 text-white"
-                }`}
-              >
-                {periods[key].label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="pt-4">
-          {seriesLoading && series.length === 0 ? (
-            <div className="flex h-[280px] items-center justify-center text-sm text-[#9cadbf]">
-              読み込み中...
+          <section className="dashboard-card rounded-[8px] p-4">
+            <div className="flex flex-col gap-4 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="dashboard-section-title text-[20px]">推移</h2>
+                <p className="mt-1 text-sm text-[#9cadbf]">表示する機器と項目を選択します。</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={selectedKey}
+                  onChange={(event) => setSelectedKey(event.target.value)}
+                  className="rounded-[8px] border border-white/10 bg-[#1f2123] px-3 py-2 text-sm text-white"
+                >
+                  {readings.map((reading) => (
+                    <option key={readingKey(reading)} value={readingKey(reading)}>
+                      {reading.deviceName} / {metricConfigForType(reading.sensor_type).label}
+                    </option>
+                  ))}
+                </select>
+                {(Object.keys(periods) as PeriodKey[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setPeriod(key)}
+                    className={`rounded-full px-3 py-2 text-sm ${
+                      period === key
+                        ? "bg-white text-[#1f2123]"
+                        : "border border-white/10 bg-white/5 text-white"
+                    }`}
+                  >
+                    {periods[key].label}
+                  </button>
+                ))}
+              </div>
             </div>
-          ) : series.length > 0 && selectedReading ? (
-            <SensorLineChart
-              records={series}
-              unit={selectedReading.unit}
-              color={metricConfigForType(selectedReading.sensor_type).color}
-              seriesNameByKey={{
-                [`ondotori:${selectedReading.sensor_type}:${selectedReading.sensor_id}`]:
-                  selectedReading.deviceName,
-              }}
-            />
-          ) : (
-            <div className="flex h-[280px] items-center justify-center text-sm text-[#9cadbf]">
-              表示できるデータがありません。
+            <div className="pt-4">
+              {seriesLoading && series.length === 0 ? (
+                <div className="flex h-[280px] items-center justify-center text-sm text-[#9cadbf]">
+                  読み込み中...
+                </div>
+              ) : series.length > 0 && selectedReading ? (
+                <SensorLineChart
+                  records={series}
+                  unit={selectedReading.unit}
+                  color={metricConfigForType(selectedReading.sensor_type).color}
+                  seriesNameByKey={{
+                    [`ondotori:${selectedReading.sensor_type}:${selectedReading.sensor_id}`]:
+                      selectedReading.deviceName,
+                  }}
+                />
+              ) : (
+                <div className="flex h-[280px] items-center justify-center text-sm text-[#9cadbf]">
+                  表示できるデータがありません。
+                </div>
+              )}
             </div>
-          )}
+          </section>
         </div>
-      </section>
+      </div>
 
       {exportOpen ? (
         <div
