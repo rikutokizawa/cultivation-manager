@@ -21,7 +21,7 @@ export function LatestImages({ images }: LatestImagesProps) {
                 <img
                   src={image.public_url}
                   alt={`${image.camera_id}の最新画像`}
-                  className="h-64 w-full object-cover"
+                  className="block h-auto w-full bg-black"
                 />
                 <div className="flex items-center justify-between gap-3 px-4 py-3">
                   <h3 className="font-semibold text-white">{image.camera_id}</h3>
