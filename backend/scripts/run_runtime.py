@@ -13,7 +13,11 @@ from backend.app.services.sensor_sources import build_sensor_source
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run sensor collection and image capture loops together.")
-    parser.add_argument("--camera-source", choices=["dummy", "directory", "rpi"], help="Override camera source.")
+    parser.add_argument(
+        "--camera-source",
+        choices=["dummy", "directory", "rpi", "usb"],
+        help="Override camera source.",
+    )
     parser.add_argument("--sensor-interval", type=int, help="Override sensor polling interval.")
     parser.add_argument("--camera-interval", type=int, help="Override image capture interval.")
     parser.add_argument("--cycles", type=int, help="Stop after N outer loop cycles.")
@@ -53,10 +57,14 @@ def main() -> None:
                 logging.info("ondotori api log: %s", settings.resolved_ondotori_api_log_path)
 
         if now >= next_camera_run:
-            with SessionLocal() as db:
-                records = persist_captured_images(db, camera_source.capture())
-            logging.info("runtime stored %s image records", len(records))
             next_camera_run = now + camera_interval
+            try:
+                with SessionLocal() as db:
+                    records = persist_captured_images(db, camera_source.capture())
+            except Exception:
+                logging.exception("runtime camera capture failed; will retry on next interval")
+            else:
+                logging.info("runtime stored %s image records", len(records))
 
         cycles += 1
         if args.cycles is not None and cycles >= args.cycles:

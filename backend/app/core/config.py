@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     camera_capture_width: int = 1280
     camera_capture_height: int = 720
     camera_extra_args: str = ""
+    usb_camera_command: str = "ffmpeg"
+    usb_camera_devices_csv: str = ""
+    usb_camera_input_format: str = "mjpeg"
     sensor_poll_interval_seconds: int = 300
     image_capture_interval_seconds: int = 900
     camera_ids_csv: str = "camera-01,camera-02"
@@ -95,6 +98,10 @@ class Settings(BaseSettings):
     @property
     def camera_ids(self) -> list[str]:
         return [camera_id.strip() for camera_id in self.camera_ids_csv.split(",") if camera_id.strip()]
+
+    @property
+    def usb_camera_devices(self) -> list[str]:
+        return [device.strip() for device in self.usb_camera_devices_csv.split(",") if device.strip()]
 
     @property
     def ondotori_remote_serials(self) -> list[str]:

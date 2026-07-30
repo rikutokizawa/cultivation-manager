@@ -24,6 +24,7 @@
   - dummy
   - directory
   - rpi
+  - usb
 - 定期実行ランナー
 - runtime / センサー保存 / おんどとりAPIレスポンスのログ出力
 
@@ -73,6 +74,9 @@ ONDOTORI_API_LOG_PATH=storage/runtime/ondotori_current.jsonl
 BACKEND_BASE_URL=http://localhost:8000
 FRONTEND_ALLOWED_ORIGINS=
 CAMERA_SOURCE_TYPE=dummy
+USB_CAMERA_COMMAND=ffmpeg
+USB_CAMERA_DEVICES_CSV=
+USB_CAMERA_INPUT_FORMAT=mjpeg
 SENSOR_POLL_INTERVAL_SECONDS=300
 IMAGE_CAPTURE_INTERVAL_SECONDS=900
 CAMERA_IDS_CSV=camera-01,camera-02
@@ -249,10 +253,12 @@ Dashboard  http://localhost:3000/
 dummy
 directory
 rpi
+usb
 ```
 
 `directory` は `INCOMING_IMAGE_PATH` 配下の画像を取り込みます。
 `rpi` は `rpicam-still` または `libcamera-still` を使います。
+`usb` は `ffmpeg` とV4L2を使って、`USB_CAMERA_DEVICES_CSV` に指定したUSBカメラから静止画を撮影します。`CAMERA_IDS_CSV` と同じ順序・同じ台数で指定してください。同型カメラを複数使う場合は、再起動後もUSBポートごとに安定する `/dev/v4l/by-path/...-video-index0` を推奨します。
 
 ### センサー収集と画像取り込みを定期実行
 
@@ -388,7 +394,7 @@ Pi へ持っていく時点で揃っているもの:
 - 定期画像取り込み
 - おんどとり現在値APIからの定期取得
 - おんどとりTRZ履歴データの取り込み
-- dummy / directory / rpi camera source
+- dummy / directory / rpi / usb camera source
 - カメラ2台分の最新画像表示
 - CSV export
 - systemd テンプレート

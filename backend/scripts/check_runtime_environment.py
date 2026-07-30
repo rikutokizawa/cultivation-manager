@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from shutil import which
 
 from backend.app.core.config import get_settings
@@ -13,6 +14,8 @@ def main() -> None:
         "camera_source_type": settings.camera_source_type,
         "camera_command": settings.camera_command or which("rpicam-still") or which("libcamera-still"),
         "camera_ids": settings.camera_ids,
+        "usb_camera_command": which(settings.usb_camera_command),
+        "usb_camera_devices": settings.usb_camera_devices,
         "storage": {
             "images": str(settings.resolved_image_storage_path),
             "incoming": str(settings.resolved_incoming_image_path),
@@ -20,6 +23,11 @@ def main() -> None:
         "checks": {
             "rpicam_still_found": which("rpicam-still") is not None,
             "libcamera_still_found": which("libcamera-still") is not None,
+            "ffmpeg_found": which(settings.usb_camera_command) is not None,
+            "usb_camera_devices_found": {
+                device: Path(device).exists()
+                for device in settings.usb_camera_devices
+            },
             "incoming_directory_exists": settings.resolved_incoming_image_path.exists(),
         },
     }

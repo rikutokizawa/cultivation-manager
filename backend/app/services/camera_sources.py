@@ -165,13 +165,19 @@ class RaspberryPiCameraSource:
             if self.settings.camera_extra_args.strip():
                 command.extend(shlex.split(self.settings.camera_extra_args))
 
-            subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=self.settings.camera_command_timeout_seconds,
-                check=True,
-            )
+            try:
+                subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.settings.camera_command_timeout_seconds,
+                    check=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                detail = (exc.stderr or exc.stdout or "").strip()
+                raise RuntimeError(
+                    f"USB camera capture failed for {device}: {detail or f'exit code {exc.returncode}'}"
+                ) from exc
 
             captures.append(
                 CapturedImage(
@@ -200,6 +206,81 @@ class RaspberryPiCameraSource:
         )
 
 
+class UsbCameraSource:
+    def __init__(self, settings: Settings):
+        self.settings = settings
+
+    def capture(self) -> list[CapturedImage]:
+        devices = self.settings.usb_camera_devices
+        camera_ids = self.settings.camera_ids
+        if len(devices) != len(camera_ids):
+            raise ValueError(
+                "USB_CAMERA_DEVICES_CSV and CAMERA_IDS_CSV must contain the same number of entries."
+            )
+
+        executable = which(self.settings.usb_camera_command)
+        if executable is None:
+            raise FileNotFoundError(
+                f"USB camera command was not found: {self.settings.usb_camera_command}"
+            )
+
+        now = datetime.now(UTC)
+        captures: list[CapturedImage] = []
+        for camera_id, device in zip(camera_ids, devices, strict=True):
+            if not Path(device).exists():
+                raise FileNotFoundError(f"USB camera device was not found: {device}")
+
+            target_name = f"{camera_id}-{now.strftime('%Y%m%d%H%M%S')}.jpg"
+            target_path = self.settings.resolved_image_storage_path / target_name
+            command = [
+                executable,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "v4l2",
+            ]
+            if self.settings.usb_camera_input_format.strip():
+                command.extend(
+                    ["-input_format", self.settings.usb_camera_input_format.strip()]
+                )
+            command.extend(
+                [
+                    "-video_size",
+                    f"{self.settings.camera_capture_width}x{self.settings.camera_capture_height}",
+                    "-i",
+                    device,
+                    "-frames:v",
+                    "1",
+                    "-y",
+                    str(target_path),
+                ]
+            )
+
+            subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=self.settings.camera_command_timeout_seconds,
+                check=True,
+            )
+            if not target_path.is_file() or target_path.stat().st_size == 0:
+                raise RuntimeError(
+                    f"USB camera command completed without creating an image: {device}"
+                )
+            captures.append(
+                CapturedImage(
+                    timestamp=now,
+                    camera_id=camera_id,
+                    location=CAMERA_LOCATIONS.get(camera_id, camera_id),
+                    file_path=str(Path("storage/images") / target_name),
+                    note=f"Captured from {device} with {Path(executable).name}",
+                )
+            )
+
+        return captures
+
+
 def build_camera_source(settings: Settings, source_type: str | None = None) -> CameraSource:
     selected_source = (source_type or settings.camera_source_type).lower()
 
@@ -209,5 +290,7 @@ def build_camera_source(settings: Settings, source_type: str | None = None) -> C
         return DirectoryCameraSource(settings)
     if selected_source == "rpi":
         return RaspberryPiCameraSource(settings)
+    if selected_source == "usb":
+        return UsbCameraSource(settings)
 
     raise ValueError(f"Unsupported camera source type: {selected_source}")
