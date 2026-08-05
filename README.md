@@ -168,25 +168,10 @@ cp frontend/.env.local.example frontend/.env.local
 ```
 
 ```text
-NEXT_PUBLIC_BACKEND_BASE_URL=http://127.0.0.1:8000
+BACKEND_INTERNAL_URL=http://127.0.0.1:8000
 ```
 
-Raspberry Pi 上で backend / frontend を常時起動し、同じネットワーク内のPCからも frontend にアクセスする場合は、Pi の LAN IP を使います。
-
-ルートの `.env`:
-
-```text
-BACKEND_BASE_URL=http://<PiのLAN IP>:8000
-FRONTEND_ALLOWED_ORIGINS=http://<PiのLAN IP>:3000
-```
-
-`frontend/.env.local`:
-
-```text
-NEXT_PUBLIC_BACKEND_BASE_URL=http://<PiのLAN IP>:8000
-```
-
-`NEXT_PUBLIC_BACKEND_BASE_URL` は build 時に反映されるため、変更後は `pnpm build` を再実行してください。
+ブラウザからのAPI通信は同一ホストの `/api` を経由し、Next.jsがPi内部のBackendへ中継します。そのため、PiのIPアドレスが変わっても `.env.local` の変更やFrontendの再ビルドは不要です。別端末からは、その時点のPiのIPを使って `http://<PiのIP>:3000` を開きます。
 
 別ポートで起動する場合:
 

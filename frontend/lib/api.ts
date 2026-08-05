@@ -1,4 +1,4 @@
-import { backendBaseUrl } from "@/lib/config";
+import { getBackendBaseUrl } from "@/lib/config";
 import type {
   Overview,
   SensorRecord,
@@ -6,7 +6,7 @@ import type {
 } from "@/types/api";
 
 async function requestJson<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${backendBaseUrl}${path}`, {
+  const response = await fetch(`${getBackendBaseUrl()}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -26,8 +26,17 @@ export function getHealth() {
   return requestJson<{ status: string; app_name: string }>("/health");
 }
 
-export function getOverview() {
-  return requestJson<Overview>("/overview");
+export async function getOverview() {
+  const overview = await requestJson<Overview>("/overview");
+  return {
+    ...overview,
+    latest_images: overview.latest_images.map((image) => ({
+      ...image,
+      public_url: `/api/images/${encodeURIComponent(
+        image.file_path.split(/[\\/]/).at(-1) ?? "",
+      )}`,
+    })),
+  };
 }
 
 export function getSensorSeries(
@@ -59,7 +68,7 @@ export function getSensorSeries(
 export async function importTrzFiles(files: File[]) {
   const body = new FormData();
   files.forEach((file) => body.append("files", file));
-  const response = await fetch(`${backendBaseUrl}/import-trz`, {
+  const response = await fetch(`${getBackendBaseUrl()}/import-trz`, {
     method: "POST",
     body,
   });
@@ -90,5 +99,5 @@ export function getSensorExportUrl(params: {
   }
 
   const query = searchParams.toString();
-  return `${backendBaseUrl}/export/sensor-records.csv${query ? `?${query}` : ""}`;
+  return `${getBackendBaseUrl()}/export/sensor-records.csv${query ? `?${query}` : ""}`;
 }

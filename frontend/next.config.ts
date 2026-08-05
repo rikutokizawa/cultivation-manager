@@ -1,23 +1,16 @@
 import type { NextConfig } from "next";
 
+const backendInternalUrl = process.env.BACKEND_INTERNAL_URL ?? "http://127.0.0.1:8000";
+
 const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
+  async rewrites() {
+    return [
       {
-        protocol: "http",
-        hostname: "localhost",
-        port: "8000",
-        pathname: "/images/**",
+        source: "/api/:path*",
+        destination: `${backendInternalUrl}/:path*`,
       },
-      {
-        protocol: "http",
-        hostname: "127.0.0.1",
-        port: "8000",
-        pathname: "/images/**",
-      },
-    ],
+    ];
   },
 };
 
 export default nextConfig;
-
