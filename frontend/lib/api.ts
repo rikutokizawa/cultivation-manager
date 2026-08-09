@@ -83,6 +83,7 @@ export async function importTrzFiles(files: File[]) {
 
 export function getSensorExportUrl(params: {
   sensorType?: string;
+  deviceId?: string;
   startAt?: string;
   endAt?: string;
 }) {
@@ -90,6 +91,9 @@ export function getSensorExportUrl(params: {
 
   if (params.sensorType) {
     searchParams.set("sensor_type", params.sensorType);
+  }
+  if (params.deviceId) {
+    searchParams.set("device_id", params.deviceId);
   }
   if (params.startAt) {
     searchParams.set("start_at", new Date(params.startAt).toISOString());

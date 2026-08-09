@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import get_settings
@@ -17,6 +17,7 @@ router = APIRouter()
 @router.get("/sensor-records.csv")
 def export_sensor_records_csv(
     sensor_type: str | None = None,
+    device_id: str | None = None,
     start_at: datetime | None = None,
     end_at: datetime | None = None,
     db: Session = Depends(get_db),
@@ -26,6 +27,13 @@ def export_sensor_records_csv(
 
     if sensor_type:
         statement = statement.filter(SensorRecord.sensor_type == sensor_type)
+    if device_id:
+        statement = statement.filter(
+            or_(
+                SensorRecord.sensor_id == device_id,
+                SensorRecord.sensor_id.startswith(f"{device_id}-ch", autoescape=True),
+            )
+        )
     if start_at:
         statement = statement.filter(SensorRecord.timestamp >= start_at)
     if end_at:
@@ -58,4 +66,3 @@ def export_sensor_records_csv(
         media_type="text/csv",
         filename=export_path.name,
     )
-

@@ -427,7 +427,7 @@ export function DashboardRealtime({ initialOverview }: DashboardRealtimeProps) {
                 閉じる
               </button>
             </div>
-            <ExportForm />
+            <ExportForm devices={overview.devices} />
           </section>
         </div>
       ) : null}
